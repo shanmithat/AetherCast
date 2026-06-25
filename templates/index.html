@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherCast // FNO-2D Weather Nowcasting Engine</title>
+    
+    <!-- SEO Metadata -->
+    <meta name="description" content="Fourier Neural Operator (FNO) weather nowcasting engine powered by the Weather Union API. Real-time predictive radar using deep operator learning.">
+    
+    <!-- Typography & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        outfit: ['Outfit', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        :root {
+            /* Dark Mode CSS Variables */
+            --bg-gradient-from: #0a0c16;
+            --bg-gradient-to: #020306;
+            --text-primary: #e2e8f0; /* slate-200 */
+            --text-secondary: #94a3b8; /* slate-400 */
+            --text-tertiary: #64748b; /* slate-500 */
+            --panel-bg: rgba(10, 14, 26, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.05);
+            --inner-bg: #020617; /* slate-950 */
+            --inner-border: #0f172a; /* slate-900 */
+            --shadow: rgba(0, 0, 0, 0.4);
+            --timeline-bg: #0f172a;
+            --scrollbar-thumb: #1e293b;
+            --scrollbar-track: #020617;
+            --label-badge: rgba(59, 130, 246, 0.15);
+            --label-badge-border: rgba(59, 130, 246, 0.3);
+            --button-secondary: #0f172a;
+            --button-secondary-hover: #1e293b;
+        }
+
+        body.light-mode {
+            /* Light Mode CSS Variables */
+            --bg-gradient-from: #f8fafc; /* slate-50 */
+            --bg-gradient-to: #e2e8f0; /* slate-200 */
+            --text-primary: #0f172a; /* slate-900 */
+            --text-secondary: #475569; /* slate-600 */
+            --text-tertiary: #64748b; /* slate-500 */
+            --panel-bg: rgba(255, 255, 255, 0.7);
+            --panel-border: rgba(15, 23, 42, 0.08);
+            --inner-bg: #ffffff;
+            --inner-border: #e2e8f0; /* slate-200 */
+            --shadow: rgba(15, 23, 42, 0.08);
+            --timeline-bg: #e2e8f0;
+            --scrollbar-thumb: #cbd5e1;
+            --scrollbar-track: #f1f5f9;
+            --label-badge: rgba(59, 130, 246, 0.08);
+            --label-badge-border: rgba(59, 130, 246, 0.2);
+            --button-secondary: #f1f5f9;
+            --button-secondary-hover: #e2e8f0;
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 0%, var(--bg-gradient-from) 0%, var(--bg-gradient-to) 100%);
+            color: var(--text-primary);
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+        
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 8px 32px 0 var(--shadow);
+            transition: background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .theme-text-primary { color: var(--text-primary); }
+        .theme-text-secondary { color: var(--text-secondary); }
+        .theme-text-tertiary { color: var(--text-tertiary); }
+        .theme-inner-bg { background-color: var(--inner-bg); }
+        .theme-inner-border { border-color: var(--inner-border); }
+        .theme-timeline-bg { background-color: var(--timeline-bg); }
+        .theme-button-secondary {
+            background-color: var(--button-secondary);
+            border-color: var(--inner-border);
+            color: var(--text-primary);
+        }
+        .theme-button-secondary:hover {
+            background-color: var(--button-secondary-hover);
+        }
+
+        .glow-active-blue {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+        .custom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 0 8px #3b82f6;
+            transition: transform 0.1s ease;
+        }
+        .custom-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.25);
+        }
+        /* Radar Sweep Animation */
+        @keyframes radar-sweep {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .radar-line {
+            transform-origin: bottom right;
+            animation: radar-sweep 4s linear infinite;
+        }
+        /* Fade transition */
+        .fade-enter-active {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 font-sans">
+    
+    <!-- Outer Container -->
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="glass-panel rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="bg-gradient-to-tr from-blue-600 to-violet-600 p-3 rounded-xl shadow-lg shadow-indigo-900/30">
+                    <i class="fa-solid fa-cloud-bolt text-2xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black font-outfit bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 tracking-tight">AETHERCAST</h1>
+                    <p class="text-xs font-mono text-indigo-400">Fourier Neural Operator Nowcasting Engine &bull; Weather Union API</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Theme Toggle Button -->
+                <button onclick="toggleTheme()" class="theme-button-secondary border p-2 px-3 rounded-xl text-xs transition duration-200 active:scale-95 flex items-center gap-1.5" title="Switch Theme">
+                    <i id="theme-icon" class="fa-solid fa-moon text-blue-400"></i>
+                    <span id="theme-text">Dark</span>
+                </button>
+                <div id="api-cache-status" class="hidden text-xs font-mono theme-inner-bg border theme-inner-border px-3 py-1.5 rounded-lg flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span id="cache-time-label" class="theme-text-secondary">API Cache: 300s</span>
+                </div>
+                <div id="engine-calibration-badge" class="text-xs font-mono theme-inner-bg border theme-inner-border px-3 py-1.5 rounded-lg flex items-center gap-2">
+                    <span id="badge-pulse" class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                    <span id="badge-text" class="theme-text-primary">Engine: Calibrating...</span>
+                </div>
+                <div id="target-label" class="hidden text-xs font-mono text-blue-500 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-lg">
+                    Active: None
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Portal View Area -->
+        <div class="relative min-h-[500px]">
+
+            <!-- Welcome Screen (Shown initially when no location is loaded) -->
+            <div id="welcome-panel" class="fade-enter-active w-full max-w-2xl mx-auto py-12 px-6 glass-panel rounded-3xl text-center space-y-8 relative z-10">
+                <div class="space-y-3">
+                    <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20">
+                        <i class="fa-solid fa-satellite-dish text-2xl text-white animate-pulse"></i>
+                    </div>
+                    <h2 class="text-3xl font-extrabold font-outfit tracking-tight">Initialize Nowcasting Engine</h2>
+                    <p class="theme-text-secondary text-sm max-w-md mx-auto leading-relaxed">
+                        AetherCast uses a 2D Fourier Neural Operator (FNO-2D) to run localized, sub-kilometer rain nowcasts for the next 2 hours. Enter your locality to pull live station data and begin.
+                    </p>
+                </div>
+
+                <!-- Unified Input Block -->
+                <div class="max-w-md mx-auto space-y-4">
+                    <!-- Text/Prompt input -->
+                    <div class="relative">
+                        <input type="text" id="welcome-locality-in" 
+                               placeholder="Try: 'nowcast Pune' or 'is it raining in Chennai?'" 
+                               class="w-full theme-inner-bg border theme-inner-border focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm rounded-xl p-4 pl-12 focus:outline-none transition"
+                               onkeydown="if(event.key === 'Enter') handleSearchSubmit()">
+                        <i class="fa-solid fa-terminal absolute left-4.5 top-4.5 theme-text-tertiary text-sm"></i>
+                        
+                        <!-- Mini search submit button inside input -->
+                        <button onclick="handleSearchSubmit()" class="absolute right-2 top-2 bg-blue-600 hover:bg-blue-500 text-white font-bold p-2 px-3 rounded-lg text-xs transition active:scale-95">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Geocoding Loader -->
+                    <div id="welcome-loader" class="hidden text-xs font-mono text-indigo-500 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-circle-notch animate-spin"></i>
+                        <span id="welcome-loader-text">Geocoding locality...</span>
+                    </div>
+
+                    <!-- GPS / Custom Locate -->
+                    <button onclick="requestBrowserGPS()" class="w-full theme-button-secondary border font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition duration-200 flex items-center justify-center gap-2 active:scale-95">
+                        <i class="fa-solid fa-location-crosshairs text-blue-500"></i> Query My Local GPS Coordinates
+                    </button>
+                </div>
+
+                <!-- Presets Grid -->
+                <div class="space-y-3 max-w-lg mx-auto border-t theme-inner-border pt-6">
+                    <span class="text-[10px] font-mono theme-text-tertiary uppercase tracking-widest block">Weather Union Stations Presets</span>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <button onclick="loadPreset(12.9716, 77.5946, 'Bangalore')" class="theme-inner-bg border theme-inner-border p-2.5 rounded-xl text-xs font-mono theme-text-secondary hover:text-blue-500 transition flex flex-col items-center gap-1.5">
+                            <span class="font-semibold">Bangalore</span>
+                            <span class="text-[9px] theme-text-tertiary">Karnataka</span>
+                        </button>
+                        <button onclick="loadPreset(13.0827, 80.2707, 'Chennai')" class="theme-inner-bg border theme-inner-border p-2.5 rounded-xl text-xs font-mono theme-text-secondary hover:text-blue-500 transition flex flex-col items-center gap-1.5">
+                            <span class="font-semibold">Chennai</span>
+                            <span class="text-[9px] theme-text-tertiary">Tamil Nadu</span>
+                        </button>
+                        <button onclick="loadPreset(18.5204, 73.8567, 'Pune')" class="theme-inner-bg border theme-inner-border p-2.5 rounded-xl text-xs font-mono theme-text-secondary hover:text-blue-500 transition flex flex-col items-center gap-1.5">
+                            <span class="font-semibold">Pune</span>
+                            <span class="text-[9px] theme-text-tertiary">Maharashtra</span>
+                        </button>
+                        <button onclick="loadPreset(19.0760, 72.8777, 'Mumbai')" class="theme-inner-bg border theme-inner-border p-2.5 rounded-xl text-xs font-mono theme-text-secondary hover:text-blue-500 transition flex flex-col items-center gap-1.5">
+                            <span class="font-semibold">Mumbai</span>
+                            <span class="text-[9px] theme-text-tertiary">Maharashtra</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Dashboard Panel (Hidden on start, transitions in when location loaded) -->
+            <div id="main-dashboard" class="hidden fade-enter-active space-y-6">
+                
+                <!-- Main Gist Panel: Forecast & Weather stats (Split 4-8) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    <!-- Left Column: Locality Details & General Weather Metrics -->
+                    <div class="lg:col-span-4 space-y-6">
+                        
+                        <!-- Active Locality Card -->
+                        <div class="glass-panel rounded-2xl p-5 space-y-4 glow-active-blue">
+                            <div class="flex items-center justify-between">
+                                <h2 class="text-sm font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
+                                    <i class="fa-solid fa-location-dot text-blue-500"></i> Target Locality
+                                </h2>
+                                <!-- Demo Mode Toggle -->
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="demo-mode-toggle" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 peer-checked:after:bg-white"></div>
+                                    <span class="ml-2 text-xs font-mono theme-text-secondary">Demo Rain</span>
+                                </label>
+                            </div>
+
+                            <div class="theme-inner-bg border theme-inner-border p-3.5 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <span class="text-[10px] font-mono theme-text-tertiary uppercase font-semibold">Active Nowcast</span>
+                                    <h3 id="dashboard-active-city" class="text-base font-bold font-outfit">Pune</h3>
+                                    <p id="dashboard-active-coords" class="text-[10px] font-mono theme-text-secondary mt-0.5">18.5204° N, 73.8567° E</p>
+                                </div>
+                                <button onclick="resetToWelcome()" class="theme-button-secondary border w-8 h-8 rounded-lg flex items-center justify-center text-xs transition active:scale-95" title="Change Location">
+                                    <i class="fa-solid fa-arrow-right-to-bracket rotate-180"></i>
+                                </button>
+                            </div>
+
+                            <!-- Search Command Input -->
+                            <div class="space-y-2">
+                                <div class="relative">
+                                    <input type="text" id="dash-locality-in" placeholder="Enter city name or text command..." class="w-full theme-inner-bg border theme-inner-border focus:border-blue-500 text-xs rounded-xl p-3 pl-9 focus:outline-none transition">
+                                    <i class="fa-solid fa-terminal absolute left-3 top-3 theme-text-tertiary text-xs"></i>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="handleDashboardSearch()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider transition duration-200 active:scale-95">
+                                        Search
+                                    </button>
+                                    <button onclick="requestBrowserGPS()" class="theme-button-secondary border font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider transition duration-200 flex items-center justify-center gap-1 active:scale-95">
+                                        <i class="fa-solid fa-location-crosshairs text-blue-500"></i> GPS Location
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coverage warning banner -->
+                        <div id="coverage-banner" class="hidden bg-amber-950/20 border border-amber-800/40 text-amber-600 dark:text-amber-300 p-4 rounded-xl text-xs font-mono leading-relaxed">
+                            <div class="flex gap-2 items-start">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+                                <span>Locality is outside the Weather Union API geographical coverage. Showing standard weather projections.</span>
+                            </div>
+                        </div>
+
+                        <!-- Live Weather Stats Card -->
+                        <div class="glass-panel rounded-2xl p-5 space-y-4">
+                            <h2 class="text-sm font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
+                                <i class="fa-solid fa-cloud-sun-rain text-rose-400"></i> Local Weather Stats
+                            </h2>
+                            
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="theme-inner-bg border theme-inner-border p-3 rounded-xl flex flex-col shadow-sm">
+                                    <span class="text-[9px] font-mono theme-text-tertiary uppercase">Temperature</span>
+                                    <span id="met-temp" class="text-lg font-bold font-outfit text-rose-500 dark:text-rose-400 mt-0.5">-- °C</span>
+                                </div>
+                                <div class="theme-inner-bg border theme-inner-border p-3 rounded-xl flex flex-col shadow-sm">
+                                    <span class="text-[9px] font-mono theme-text-tertiary uppercase">Humidity</span>
+                                    <span id="met-humidity" class="text-lg font-bold font-outfit text-blue-500 dark:text-blue-400 mt-0.5">-- %</span>
+                                </div>
+                                <div class="theme-inner-bg border theme-inner-border p-3 rounded-xl flex flex-col col-span-2 shadow-sm">
+                                    <span class="text-[9px] font-mono theme-text-tertiary uppercase">Current Rain Rate</span>
+                                    <span id="met-rain" class="text-xl font-black font-outfit text-indigo-500 dark:text-indigo-400 mt-0.5">-- mm/h</span>
+                                </div>
+                            </div>
+
+                            <!-- Compact Wind Info -->
+                            <div class="border-t theme-inner-border pt-4 flex items-center justify-between gap-4">
+                                <div class="flex flex-col">
+                                    <span class="text-[9px] font-mono theme-text-tertiary uppercase">Wind Speed</span>
+                                    <span id="met-wind" class="text-base font-bold text-emerald-600 dark:text-emerald-400">-- km/h</span>
+                                    <span id="met-wind-dir" class="text-[9px] font-mono theme-text-tertiary">Angle: --</span>
+                                </div>
+                                <!-- Small Compass Indicator -->
+                                <div class="relative w-16 h-16 flex items-center justify-center theme-inner-bg rounded-full border theme-inner-border shadow-inner">
+                                    <div id="wind-needle" class="w-0.5 h-10 bg-gradient-to-t from-transparent to-emerald-450 rounded-full transition-transform duration-700">
+                                        <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full -mt-0.5 border border-slate-950"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: dominant 2-Hour Forecast Scrubber Player -->
+                    <div class="lg:col-span-8 space-y-6">
+                        
+                        <!-- Forecast player -->
+                        <div class="glass-panel rounded-2xl p-5 space-y-4">
+                            <div class="flex items-center justify-between border-b theme-inner-border pb-3">
+                                <div>
+                                    <h2 class="text-lg font-bold font-outfit">2-Hour Rain Nowcast Player</h2>
+                                    <p class="text-xs font-mono theme-text-secondary">Animate spatial rainfall projections at 5-minute steps</p>
+                                </div>
+                                <!-- Minimal toggle: FNO or physics -->
+                                <div class="theme-inner-bg border theme-inner-border p-0.5 rounded-lg flex text-[9px] font-mono">
+                                    <button id="view-mode-fno" onclick="setViewMode('fno')" class="px-2 py-1 rounded bg-blue-600 text-white font-semibold transition">FNO Neural</button>
+                                    <button id="view-mode-adv" onclick="setViewMode('advection')" class="px-2 py-1 rounded theme-text-secondary transition hover:text-blue-500">Physics Model</button>
+                                </div>
+                            </div>
+
+                            <!-- Canvas Display Box -->
+                            <div class="relative flex justify-center items-center theme-inner-bg rounded-2xl border theme-inner-border py-6 overflow-hidden min-h-[300px]">
+                                <div class="relative">
+                                    <canvas id="main-forecast-canvas" width="288" height="288" class="rounded-xl border theme-inner-border shadow-2xl relative z-10"></canvas>
+                                    
+                                    <!-- Scanning sweep loader -->
+                                    <div id="canvas-radar-overlay" class="absolute inset-0 border theme-inner-border bg-slate-950/95 dark:bg-slate-950/90 rounded-xl flex items-center justify-center">
+                                        <div class="w-48 h-48 rounded-full border border-indigo-900/40 relative flex items-center justify-center overflow-hidden">
+                                            <div class="w-32 h-32 rounded-full border border-indigo-900/30"></div>
+                                            <div class="w-16 h-16 rounded-full border border-indigo-900/20"></div>
+                                            <div class="absolute right-[50%] bottom-[50%] w-[50%] h-[50%] bg-gradient-to-br from-indigo-500/10 to-transparent origin-bottom-right radar-line"></div>
+                                            <span class="absolute text-[10px] font-mono text-indigo-400 animate-pulse">Awaiting Location...</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Legend -->
+                                    <div class="absolute bottom-2 left-2 theme-inner-bg border theme-inner-border rounded-lg p-2 flex flex-col gap-1 text-[8px] font-mono theme-text-secondary select-none z-20 shadow-lg">
+                                        <span class="theme-text-primary font-bold border-b theme-inner-border pb-0.5 mb-0.5 uppercase">Rain Rate (mm/h)</span>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="w-3.5 h-2 rounded bg-[#068cc8]"></div><span>0 - 2 (Light)</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="w-3.5 h-2 rounded bg-[#06c8c0]"></div><span>2 - 10 (Moderate)</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="w-3.5 h-2 rounded bg-[#1cc806]"></div><span>10 - 25 (Heavy)</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="w-3.5 h-2 rounded bg-[#c8b706]"></div><span>25+ (Violent)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Timeline scrubber -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between text-[11px] font-mono theme-text-secondary">
+                                    <div class="flex items-center gap-1.5 theme-inner-bg px-2.5 py-1 rounded-md border theme-inner-border">
+                                        <i class="fa-regular fa-clock text-blue-500"></i>
+                                        <span id="current-timeline-val">Horizon: +5 Mins</span>
+                                    </div>
+                                    <span id="current-time-clock" class="theme-text-tertiary">--:-- (Forecast)</span>
+                                </div>
+                                
+                                <div class="flex items-center gap-3">
+                                    <button id="btn-play" onclick="togglePlayback()" class="bg-blue-600 hover:bg-blue-500 text-white w-10 h-10 rounded-xl flex items-center justify-center text-sm transition active:scale-90 shadow-lg shadow-blue-900/20">
+                                        <i id="play-icon" class="fa-solid fa-play"></i>
+                                    </button>
+                                    <input type="range" id="timeline-slider" min="0" max="23" value="0" oninput="onSliderMove(this.value)" class="flex-1 h-2 theme-timeline-bg rounded-lg appearance-none cursor-pointer custom-slider focus:outline-none">
+                                </div>
+
+                                <div class="flex justify-between px-1 text-[8px] font-mono theme-text-tertiary select-none">
+                                    <span>0 min</span>
+                                    <span>30 min</span>
+                                    <span>60 min</span>
+                                    <span>90 min</span>
+                                    <span>120 min (2h)</span>
+                                </div>
+                            </div>
+
+                            <!-- Dynamic Text Forecast Alert -->
+                            <div class="theme-inner-bg border theme-inner-border p-4 rounded-xl flex gap-3.5 items-center mt-4 shadow-sm">
+                                <div class="theme-button-secondary border p-2.5 rounded-xl flex items-center justify-center w-11 h-11 shadow-inner">
+                                    <i id="forecast-alert-icon" class="fa-solid fa-cloud-sun text-lg theme-text-tertiary"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="text-[9px] font-bold font-outfit uppercase tracking-widest theme-text-tertiary">Live Forecast Summary</h4>
+                                    <p id="forecast-alert-text" class="text-xs font-semibold theme-text-primary mt-1 leading-relaxed">
+                                        Select a location preset, query, or current GPS to generate a dynamic 2-hour weather text summary.
+                                    </p>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Collapsible Divider: Sidelining technical neural engine details -->
+                <div class="flex justify-center pt-4">
+                    <button onclick="toggleTechSpecs()" class="theme-button-secondary border px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition flex items-center gap-2.5 active:scale-95 shadow-sm">
+                        <i id="tech-toggle-icon" class="fa-solid fa-chevron-down text-indigo-500 transition-transform duration-300"></i>
+                        <span id="tech-toggle-text">Show Neural Engine Specs & Comparisons</span>
+                    </button>
+                </div>
+
+                <!-- Collapsible Section: Technical details placed below/sidelined -->
+                <div id="technical-diagnostics-panel" class="hidden transition-all duration-500 space-y-6 pt-4 border-t theme-inner-border">
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- Left 4 cols: Performance & Calibration -->
+                        <div class="lg:col-span-5 space-y-6">
+                            <!-- Calibration Badge & Progress -->
+                            <div class="glass-panel rounded-2xl p-5 space-y-4">
+                                <h3 class="text-xs font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
+                                    <i class="fa-solid fa-chart-line text-purple-500"></i> FNO Model Calibration
+                                </h3>
+                                <p class="text-[10px] font-mono theme-text-tertiary leading-normal">
+                                    The Fourier Neural Operator calibrates dynamically on startup against discrete advection-diffusion physics equations.
+                                </p>
+                                
+                                <div class="space-y-2.5 pt-2">
+                                    <div class="flex justify-between items-center text-xs font-mono">
+                                        <span class="theme-text-secondary">Training Epochs</span>
+                                        <span id="calib-progress-txt" class="theme-text-primary">0/30</span>
+                                    </div>
+                                    <div class="w-full theme-inner-bg rounded-full h-1.5 border theme-inner-border overflow-hidden">
+                                        <div id="calib-progress-bar" class="bg-gradient-to-r from-purple-500 to-indigo-500 h-1.5 w-0 transition-all duration-300"></div>
+                                    </div>
+                                    <div class="flex justify-between items-center text-[10px] font-mono">
+                                        <span class="theme-text-secondary">Cal Loss (MSE)</span>
+                                        <span id="calib-loss-val" class="text-purple-500 font-bold">--</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Speed/Latency Benchmarks -->
+                            <div class="glass-panel rounded-2xl p-5 space-y-3.5">
+                                <h3 class="text-xs font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
+                                    <i class="fa-solid fa-microchip text-blue-500"></i> Speed Benchmarks
+                                </h3>
+                                
+                                <div class="space-y-2.5 font-mono text-[10px]">
+                                    <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
+                                        <span class="theme-text-secondary">Inference Device</span>
+                                        <span id="bench-device" class="text-blue-500 font-bold">CPU</span>
+                                    </div>
+                                    <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
+                                        <span class="theme-text-secondary">FNO Model Params</span>
+                                        <span class="theme-text-primary">106,264</span>
+                                    </div>
+                                    <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
+                                        <span class="theme-text-secondary">FNO Latency</span>
+                                        <span id="bench-fno-time" class="text-emerald-500 font-bold">-- ms</span>
+                                    </div>
+                                    <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
+                                        <span class="theme-text-secondary">Physics Solver</span>
+                                        <span class="text-indigo-500 font-bold">-- ms</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right 7 cols: Comparative grids side-by-side & Diff option -->
+                        <div class="lg:col-span-7 space-y-6">
+                            
+                            <!-- Small Comparison views -->
+                            <div class="glass-panel rounded-2xl p-5 space-y-4">
+                                <div class="flex items-center justify-between border-b theme-inner-border pb-2">
+                                    <h3 class="text-xs font-bold font-outfit uppercase tracking-wider theme-text-secondary">Model Output Comparisons</h3>
+                                    <button onclick="setViewMode('diff')" class="text-[9px] font-mono bg-purple-500/10 text-purple-600 border border-purple-500/20 hover:bg-purple-500/20 px-2 py-1 rounded transition">Active Model Difference Map</button>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="theme-inner-bg border theme-inner-border rounded-xl p-3 flex flex-col items-center shadow-sm">
+                                        <span class="text-[9px] font-mono theme-text-tertiary uppercase mb-2">FNO-2D Neural output</span>
+                                        <canvas id="fno-comp-canvas" width="160" height="160" class="rounded-lg border theme-inner-border w-full max-w-[150px] aspect-square"></canvas>
+                                        <span id="fno-metric" class="text-[8px] font-mono theme-text-tertiary mt-2">Max Rain Rate: --</span>
+                                    </div>
+                                    <div class="theme-inner-bg border theme-inner-border rounded-xl p-3 flex flex-col items-center shadow-sm">
+                                        <span class="text-[9px] font-mono theme-text-tertiary uppercase mb-2">Physical Advection output</span>
+                                        <canvas id="adv-comp-canvas" width="160" height="160" class="rounded-lg border theme-inner-border w-full max-w-[150px] aspect-square"></canvas>
+                                        <span id="adv-metric" class="text-[8px] font-mono theme-text-tertiary mt-2">Max Rain Rate: --</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rain Volume analytics chart -->
+                    <div class="glass-panel rounded-2xl p-5 space-y-4">
+                        <h3 class="text-xs font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
+                            <i class="fa-solid fa-chart-area text-indigo-500"></i> Water Volume Dynamics Forecast (Next 2 Hours)
+                        </h3>
+                        <div class="h-56 w-full theme-inner-bg rounded-xl border theme-inner-border p-3">
+                            <canvas id="analytics-chart" class="w-full h-full"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripting -->
+    <script>
+        let currentLat = null;
+        let currentLon = null;
+        let activeLocName = "";
+        
+        let forecastData = null;
+        let viewMode = "fno";
+        let currentStep = 0;
+        let playbackInterval = null;
+        let dynamicsChart = null;
+        let cacheTimerInterval = null;
+        let showTechSpecs = false;
+
+        // Theme management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.body.classList.add('light-mode');
+                document.getElementById('theme-icon').className = "fa-solid fa-sun text-amber-500 animate-spin-slow";
+                document.getElementById('theme-text').innerText = "Light";
+            } else {
+                document.body.classList.remove('light-mode');
+                document.getElementById('theme-icon').className = "fa-solid fa-moon text-blue-400";
+                document.getElementById('theme-text').innerText = "Dark";
+            }
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('light-mode');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            
+            const icon = document.getElementById('theme-icon');
+            const text = document.getElementById('theme-text');
+            
+            if (isLight) {
+                icon.className = "fa-solid fa-sun text-amber-500 animate-spin-slow";
+                text.innerText = "Light";
+            } else {
+                icon.className = "fa-solid fa-moon text-blue-400";
+                text.innerText = "Dark";
+            }
+
+            // Force update canvas colors and charts based on theme
+            updateCanvases();
+            if (forecastData && showTechSpecs) {
+                updateAnalyticsChart(forecastData);
+            }
+        }
+
+        // Toggles technical details visibility
+        function toggleTechSpecs() {
+            showTechSpecs = !showTechSpecs;
+            const panel = document.getElementById('technical-diagnostics-panel');
+            const icon = document.getElementById('tech-toggle-icon');
+            const text = document.getElementById('tech-toggle-text');
+            
+            if (showTechSpecs) {
+                panel.classList.remove('hidden');
+                icon.className = "fa-solid fa-chevron-up text-indigo-500 transition-transform duration-300";
+                text.innerText = "Hide Neural Engine Specs & Comparisons";
+                
+                // Recalculate Chart size because canvas was previously display:none
+                if (forecastData) {
+                    setTimeout(() => {
+                        updateAnalyticsChart(forecastData);
+                    }, 50);
+                }
+            } else {
+                panel.classList.add('hidden');
+                icon.className = "fa-solid fa-chevron-down text-indigo-500 transition-transform duration-300";
+                text.innerText = "Show Neural Engine Specs & Comparisons";
+            }
+        }
+
+        // Custom Natural Language Prompt / Search Parser
+        function parseLocalityPrompt(query) {
+            let clean = query.trim().toLowerCase();
+            if (!clean) return "";
+
+            // Regex patterns for extracting locality
+            // Pattern 1: nowcast <city> or forecast <city> or weather <city>
+            let match1 = clean.match(/(?:nowcast|forecast|weather|show me|check|scan)\s+(?:in|at|for\s+)?([a-z\s0-9]+)/i);
+            if (match1 && match1[1]) {
+                return match1[1].trim();
+            }
+
+            // Pattern 2: is it raining in <city> / will it rain at <city>
+            let match2 = clean.match(/(?:raining|rain|weather|conditions)\s+(?:in|at|for\s+)?([a-z\s0-9]+)/i);
+            if (match2 && match2[1]) {
+                return match2[1].trim();
+            }
+
+            // Fallback: Use the whole string
+            return query;
+        }
+
+        // Search submit from welcome screen
+        function handleSearchSubmit() {
+            const rawVal = document.getElementById('welcome-locality-in').value;
+            const parsedCity = parseLocalityPrompt(rawVal);
+            if (!parsedCity) {
+                alert("Please enter a valid locality name or search query.");
+                return;
+            }
+            geocodeAndInitialize(parsedCity, true);
+        }
+
+        // Search submit from active dashboard
+        function handleDashboardSearch() {
+            const rawVal = document.getElementById('dash-locality-in').value;
+            const parsedCity = parseLocalityPrompt(rawVal);
+            if (!parsedCity) {
+                alert("Please enter a locality name or query.");
+                return;
+            }
+            geocodeAndInitialize(parsedCity, false);
+        }
+
+        // Geocoding function
+        async function geocodeAndInitialize(query, fromWelcome = false) {
+            const loader = document.getElementById('welcome-loader');
+            if (fromWelcome) {
+                loader.classList.remove('hidden');
+                document.getElementById('welcome-loader-text').innerText = `Geocoding '${query}'...`;
+            }
+
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+                const response = await fetch(url, { headers: { 'User-Agent': 'AetherCastNowcastingPortal/2.0' } });
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    currentLat = parseFloat(data[0].lat);
+                    currentLon = parseFloat(data[0].lon);
+                    activeLocName = data[0].display_name.split(',')[0];
+                    
+                    // Switch UI from Welcome -> Dashboard
+                    if (fromWelcome) {
+                        document.getElementById('welcome-panel').classList.add('hidden');
+                        document.getElementById('main-dashboard').classList.remove('hidden');
+                    }
+                    
+                    // Update Labels
+                    document.getElementById('target-label').classList.remove('hidden');
+                    document.getElementById('target-label').innerText = `Active: ${activeLocName} (${currentLat.toFixed(4)}, ${currentLon.toFixed(4)})`;
+                    
+                    document.getElementById('dashboard-active-city').innerText = activeLocName;
+                    document.getElementById('dashboard-active-coords').innerText = `${currentLat.toFixed(4)}° N, ${currentLon.toFixed(4)}° E`;
+                    
+                    // Clear radar sweep overlay
+                    document.getElementById('canvas-radar-overlay').classList.add('hidden');
+
+                    // Run pipeline
+                    runInferencePipeline();
+                } else {
+                    alert(`Locality "${query}" could not be resolved. Please try a simpler search term.`);
+                }
+            } catch (err) {
+                alert("Geocoding service timed out. Please verify your connection.");
+            } finally {
+                if (fromWelcome) {
+                    loader.classList.add('hidden');
+                }
+            }
+        }
+
+        // Return to startup view
+        function resetToWelcome() {
+            // Stop playback
+            if (playbackInterval) togglePlayback();
+            
+            currentLat = null;
+            currentLon = null;
+            activeLocName = "";
+            forecastData = null;
+
+            document.getElementById('welcome-locality-in').value = "";
+            document.getElementById('target-label').classList.add('hidden');
+            
+            document.getElementById('main-dashboard').classList.add('hidden');
+            document.getElementById('welcome-panel').classList.remove('hidden');
+            
+            document.getElementById('canvas-radar-overlay').classList.remove('hidden');
+        }
+
+        // Preset loader
+        function loadPreset(lat, lon, name) {
+            currentLat = lat;
+            currentLon = lon;
+            activeLocName = name;
+            
+            document.getElementById('welcome-panel').classList.add('hidden');
+            document.getElementById('main-dashboard').classList.remove('hidden');
+            
+            document.getElementById('target-label').classList.remove('hidden');
+            document.getElementById('target-label').innerText = `Active: ${name} (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+            
+            document.getElementById('dashboard-active-city').innerText = name;
+            document.getElementById('dashboard-active-coords').innerText = `${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`;
+            
+            document.getElementById('canvas-radar-overlay').classList.add('hidden');
+            
+            runInferencePipeline();
+        }
+
+        // Browser GPS request
+        function requestBrowserGPS() {
+            if (!navigator.geolocation) return alert("Browser GPS geolocation is not supported.");
+            
+            const loader = document.getElementById('welcome-loader');
+            loader.classList.remove('hidden');
+            document.getElementById('welcome-loader-text').innerText = "Requesting GPS coordinates...";
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    loader.classList.add('hidden');
+                    currentLat = position.coords.latitude;
+                    currentLon = position.coords.longitude;
+                    activeLocName = "Local GPS";
+                    
+                    document.getElementById('welcome-panel').classList.add('hidden');
+                    document.getElementById('main-dashboard').classList.remove('hidden');
+                    
+                    document.getElementById('target-label').classList.remove('hidden');
+                    document.getElementById('target-label').innerText = `Active: GPS Location (${currentLat.toFixed(4)}, ${currentLon.toFixed(4)})`;
+                    
+                    document.getElementById('dashboard-active-city').innerText = "My Location";
+                    document.getElementById('dashboard-active-coords').innerText = `${currentLat.toFixed(4)}° N, ${currentLon.toFixed(4)}° E`;
+                    
+                    document.getElementById('canvas-radar-overlay').classList.add('hidden');
+                    
+                    runInferencePipeline();
+                },
+                (error) => {
+                    loader.classList.add('hidden');
+                    alert(`GPS Permission Denied: ${error.message}`);
+                }
+            );
+        }
+
+        // FNO Background training checker
+        async function checkCalibrationStatus() {
+            try {
+                const res = await fetch('/api/engine_status');
+                const status = await res.json();
+                
+                const progressText = document.getElementById('calib-progress-txt');
+                const progressBar = document.getElementById('calib-progress-bar');
+                const lossVal = document.getElementById('calib-loss-val');
+                
+                const badgePulse = document.getElementById('badge-pulse');
+                const badgeText = document.getElementById('badge-text');
+
+                const epoch = status.epoch;
+                const total = status.total_epochs;
+                const progressPct = (epoch / total) * 100;
+                
+                progressText.innerText = `${epoch}/${total}`;
+                progressBar.style.width = `${progressPct}%`;
+                
+                if (status.loss_history && status.loss_history.length > 0) {
+                    const latestLoss = status.loss_history[status.loss_history.length - 1];
+                    lossVal.innerText = latestLoss.toFixed(6);
+                } else {
+                    lossVal.innerText = "Pending";
+                }
+
+                if (status.status === "ready") {
+                    badgePulse.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+                    badgeText.innerText = `Engine: FNO Ready (${status.device})`;
+                    document.getElementById('bench-device').innerText = status.device;
+                    document.getElementById('bench-params').innerText = status.param_count.toLocaleString();
+                    return true;
+                } else if (status.status === "training") {
+                    badgePulse.className = "w-2 h-2 rounded-full bg-purple-500 animate-pulse";
+                    badgeText.innerText = `Engine: Calibrating...`;
+                    return false;
+                } else {
+                    badgePulse.className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
+                    badgeText.innerText = "Engine: Fallback Mode";
+                    return false;
+                }
+            } catch (err) {
+                console.error("Error checking FNO state", err);
+                return false;
+            }
+        }
+
+        async function startCalibrationPolling() {
+            const isReady = await checkCalibrationStatus();
+            if (!isReady) {
+                const interval = setInterval(async () => {
+                    const ready = await checkCalibrationStatus();
+                    if (ready) {
+                        clearInterval(interval);
+                        if (currentLat !== null && currentLon !== null) {
+                            runInferencePipeline();
+                        }
+                    }
+                }, 1500);
+            }
+        }
+
+        // Color mapper for rain fields
+        function getRainColor(val) {
+            if (val <= 0.05) {
+                // Background color changes based on light/dark mode
+                return document.body.classList.contains('light-mode') ? "rgb(241, 245, 249)" : "rgb(15, 23, 42)";
+            }
+            
+            // Map values to discrete meteorological colors:
+            // 0 - 2 mm/h: Blue
+            // 2 - 10 mm/h: Cyan
+            // 10 - 25 mm/h: Green
+            // 25+ mm/h: Orange/Red
+            if (val < 2) {
+                const int = Math.floor((val / 2.0) * 80);
+                return `rgb(6, ${100 + int}, ${150 + int})`;
+            } else if (val < 10) {
+                const int = Math.floor(((val - 2.0) / 8.0) * 100);
+                return `rgb(6, ${180 + int * 0.5}, ${180 + int * 0.7})`;
+            } else if (val < 25) {
+                const int = Math.floor(((val - 10.0) / 15.0) * 120);
+                return `rgb(${28 + int * 0.5}, 200, ${6 + int * 0.1})`;
+            } else {
+                const int = Math.min(100, Math.floor(((val - 25.0) / 20.0) * 150));
+                return `rgb(${200 + int}, ${180 - int * 1.2}, 6)`;
+            }
+        }
+
+        // Draw grids on canvas
+        function drawGrid(canvasId, gridData) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            const size = 32;
+            const cellW = w / size;
+            const cellH = h / size;
+
+            ctx.clearRect(0, 0, w, h);
+            
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    const val = gridData[r][c];
+                    ctx.fillStyle = getRainColor(val);
+                    ctx.fillRect(c * cellW, r * cellH, cellW + 0.3, cellH + 0.3);
+                }
+            }
+        }
+
+        // Draw model difference grids
+        function drawDiffGrid(canvasId, fnoGrid, advGrid) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            const size = 32;
+            const cellW = w / size;
+            const cellH = h / size;
+
+            ctx.clearRect(0, 0, w, h);
+            
+            const isLight = document.body.classList.contains('light-mode');
+            const identColor = isLight ? "rgb(241, 245, 249)" : "rgb(15, 23, 42)";
+            
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    const fVal = fnoGrid[r][c];
+                    const aVal = advGrid[r][c];
+                    const diff = fVal - aVal;
+                    
+                    if (Math.abs(diff) < 0.1) {
+                        ctx.fillStyle = identColor;
+                    } else if (diff > 0) {
+                        const opacity = Math.min(1.0, diff / 5.0);
+                        ctx.fillStyle = `rgba(239, 68, 68, ${0.15 + opacity * 0.8})`; // Red
+                    } else {
+                        const opacity = Math.min(1.0, -diff / 5.0);
+                        ctx.fillStyle = `rgba(59, 130, 246, ${0.15 + opacity * 0.8})`; // Blue
+                    }
+                    ctx.fillRect(c * cellW, r * cellH, cellW + 0.3, cellH + 0.3);
+                }
+            }
+        }
+
+        // Textual Forecast Summary Generator
+        function updateForecastTextSummary() {
+            if (!forecastData) return;
+            
+            const met = forecastData.meteorology;
+            const temp = met.temperature;
+            const fnoFrame = forecastData.grids_fno[currentStep];
+            
+            // Find max rain rate in current scrubber frame
+            let maxRain = 0;
+            for (let r = 0; r < 32; r++) {
+                for (let c = 0; c < 32; c++) {
+                    if (fnoFrame[r][c] > maxRain) maxRain = fnoFrame[r][c];
+                }
+            }
+
+            // Find global peak rain rate across the entire 2-hour window
+            let globalMax = 0;
+            let globalPeakStep = 0;
+            for (let s = 0; s < 24; s++) {
+                const frame = forecastData.grids_fno[s];
+                for (let r = 0; r < 32; r++) {
+                    for (let c = 0; c < 32; c++) {
+                        if (frame[r][c] > globalMax) {
+                            globalMax = frame[r][c];
+                            globalPeakStep = s;
+                        }
+                    }
+                }
+            }
+
+            let outlookText = "";
+            
+            if (globalMax <= 0.05) {
+                if (temp >= 35) {
+                    outlookText = "Extremely hot and dry conditions will persist with no precipitation expected.";
+                } else if (temp < 18) {
+                    outlookText = "Cool and dry conditions expected. No rainfall predicted.";
+                } else {
+                    outlookText = "Pleasant and clear weather predicted. No rainfall expected.";
+                }
+            } else {
+                const peakMins = (globalPeakStep + 1) * 5;
+                let rainType = "light drizzle";
+                if (globalMax >= 25) {
+                    rainType = "violent downpours";
+                } else if (globalMax >= 10) {
+                    rainType = "heavy rain";
+                } else if (globalMax >= 2) {
+                    rainType = "moderate rain showers";
+                }
+                outlookText = `Rainfall is projected to peak in ${peakMins} mins with ${rainType} (max intensity: ${globalMax.toFixed(1)} mm/h).`;
+            }
+
+            let stepText = "";
+            let iconClass = "fa-cloud-sun text-slate-450";
+            
+            if (maxRain <= 0.05) {
+                if (temp >= 35) {
+                    stepText = "Extremely hot and dry.";
+                    iconClass = "fa-temperature-high text-orange-500 animate-pulse";
+                } else if (temp < 18) {
+                    stepText = "Cool and dry.";
+                    iconClass = "fa-snowflake text-sky-500";
+                } else {
+                    stepText = "Clear conditions.";
+                    iconClass = "fa-sun text-amber-500";
+                }
+            } else if (maxRain < 2) {
+                stepText = "Light drizzle falling.";
+                iconClass = "fa-cloud-sun-rain text-blue-400";
+            } else if (maxRain < 10) {
+                stepText = "Moderate rain showers.";
+                iconClass = "fa-cloud-rain text-blue-500";
+            } else if (maxRain < 25) {
+                stepText = "Heavy rainfall. Commuters proceed with caution.";
+                iconClass = "fa-cloud-showers-heavy text-indigo-500";
+            } else {
+                stepText = "Violent downpour! Risk of localized flash flooding.";
+                iconClass = "fa-cloud-bolt text-rose-500 animate-pulse";
+            }
+
+            const minutes = (currentStep + 1) * 5;
+            document.getElementById('forecast-alert-text').innerHTML = `
+                <strong>2-Hour Outlook:</strong> ${outlookText} <br>
+                <span class="text-[11px] text-blue-500 dark:text-blue-400 font-mono mt-1 block">At +${minutes} Mins: ${stepText}</span>
+            `;
+            document.getElementById('forecast-alert-icon').className = `fa-solid ${iconClass} text-lg`;
+        }
+
+        // Update active canvas frames
+        function updateCanvases() {
+            if (!forecastData) return;
+
+            const fnoFrame = forecastData.grids_fno[currentStep];
+            const advFrame = forecastData.grids_advection[currentStep];
+
+            if (showTechSpecs) {
+                drawGrid('fno-comp-canvas', fnoFrame);
+                drawGrid('adv-comp-canvas', advFrame);
+            }
+
+            if (viewMode === "fno") {
+                drawGrid('main-forecast-canvas', fnoFrame);
+            } else if (viewMode === "advection") {
+                drawGrid('main-forecast-canvas', advFrame);
+            } else if (viewMode === "diff") {
+                drawDiffGrid('main-forecast-canvas', fnoFrame, advFrame);
+            }
+
+            // Update Max metrics
+            if (showTechSpecs) {
+                let maxFno = 0, maxAdv = 0;
+                for (let r=0; r<32; r++) {
+                    for(let c=0; c<32; c++) {
+                        if(fnoFrame[r][c] > maxFno) maxFno = fnoFrame[r][c];
+                        if(advFrame[r][c] > maxAdv) maxAdv = advFrame[r][c];
+                    }
+                }
+                document.getElementById('fno-metric').innerText = `Max Rain Rate: ${maxFno.toFixed(2)} mm/h`;
+                document.getElementById('adv-metric').innerText = `Max Rain Rate: ${maxAdv.toFixed(2)} mm/h`;
+            }
+
+            // Timeline labels
+            const minutes = (currentStep + 1) * 5;
+            document.getElementById('current-timeline-val').innerText = `Horizon: +${minutes} Mins`;
+
+            const date = new Date();
+            date.setMinutes(date.getMinutes() + minutes);
+            document.getElementById('current-time-clock').innerText = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " (Forecast)";
+
+            // Update textual forecast summary
+            updateForecastTextSummary();
+        }
+
+        // View Mode selectors
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('view-mode-fno').className = "px-2 py-1 rounded text-slate-400 dark:text-slate-400 transition hover:text-blue-500";
+            document.getElementById('view-mode-adv').className = "px-2 py-1 rounded text-slate-400 dark:text-slate-400 transition hover:text-blue-500";
+            
+            if (mode === 'fno') {
+                document.getElementById('view-mode-fno').className = "px-2 py-1 rounded bg-blue-600 text-white font-semibold transition";
+            } else if (mode === 'advection') {
+                document.getElementById('view-mode-adv').className = "px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition";
+            }
+            updateCanvases();
+        }
+
+        // Timeline scrubber
+        function onSliderMove(val) {
+            currentStep = parseInt(val);
+            updateCanvases();
+        }
+
+        // Playback control
+        function togglePlayback() {
+            const icon = document.getElementById('play-icon');
+            const btn = document.getElementById('btn-play');
+            
+            if (playbackInterval) {
+                clearInterval(playbackInterval);
+                playbackInterval = null;
+                icon.className = "fa-solid fa-play";
+                btn.className = "bg-blue-600 hover:bg-blue-500 text-white w-10 h-10 rounded-xl flex items-center justify-center text-sm transition shadow-lg shadow-blue-900/20 active:scale-90";
+            } else {
+                icon.className = "fa-solid fa-pause";
+                btn.className = "bg-rose-600 hover:bg-rose-500 text-white w-10 h-10 rounded-xl flex items-center justify-center text-sm transition shadow-lg shadow-rose-900/20 active:scale-90";
+                
+                playbackInterval = setInterval(() => {
+                    currentStep = (currentStep + 1) % 24;
+                    document.getElementById('timeline-slider').value = currentStep;
+                    updateCanvases();
+                }, 500);
+            }
+        }
+
+        // Chart representation
+        function updateAnalyticsChart(data) {
+            const canvasElement = document.getElementById('analytics-chart');
+            if (!canvasElement) return;
+
+            const xLabels = Array.from({length: 24}, (_, i) => `+${(i+1)*5}m`);
+            
+            const fnoSums = data.grids_fno.map(grid => {
+                let sum = 0;
+                grid.forEach(row => row.forEach(val => sum += val));
+                return sum / (32 * 32); 
+            });
+
+            const advSums = data.grids_advection.map(grid => {
+                let sum = 0;
+                grid.forEach(row => row.forEach(val => sum += val));
+                return sum / (32 * 32); 
+            });
+
+            if (dynamicsChart) {
+                dynamicsChart.destroy();
+            }
+
+            const ctx = canvasElement.getContext('2d');
+            
+            // Adjust chart theme dynamically
+            const isLight = document.body.classList.contains('light-mode');
+            const gridColor = isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.02)';
+            const labelColor = isLight ? '#475569' : '#94a3b8';
+            const tickColor = isLight ? '#64748b' : '#64748b';
+
+            dynamicsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: xLabels,
+                    datasets: [
+                        {
+                            label: 'FNO-2D Neural Projection',
+                            data: fnoSums,
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            borderWidth: 2.5,
+                            fill: true,
+                            tension: 0.35
+                        },
+                        {
+                            label: 'Physical Advection Shift',
+                            data: advSums,
+                            borderColor: 'rgb(99, 102, 241)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            fill: false,
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: labelColor,
+                                font: { family: 'Fira Code', size: 9 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: gridColor },
+                            ticks: { color: tickColor, font: { family: 'Fira Code', size: 9 } }
+                        },
+                        y: {
+                            grid: { color: gridColor },
+                            ticks: { color: tickColor, font: { family: 'Fira Code', size: 9 } },
+                            title: {
+                                display: true,
+                                text: 'Avg Rainfall Intensity (mm/h)',
+                                color: tickColor,
+                                font: { family: 'Inter', size: 10 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Cache counting
+        function startCacheCountdown(secondsRemaining) {
+            if (cacheTimerInterval) clearInterval(cacheTimerInterval);
+            
+            const cacheBanner = document.getElementById('api-cache-status');
+            const cacheLabel = document.getElementById('cache-time-label');
+            cacheBanner.classList.remove('hidden');
+
+            let remaining = secondsRemaining;
+            cacheLabel.innerText = `API Cache: ${remaining}s`;
+
+            cacheTimerInterval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(cacheTimerInterval);
+                    cacheBanner.classList.add('hidden');
+                } else {
+                    cacheLabel.innerText = `API Cache: ${remaining}s`;
+                }
+            }, 1000);
+        }
+
+        // Inference caller
+        async function runInferencePipeline() {
+            if (currentLat === null || currentLon === null) return;
+
+            const isDemo = document.getElementById('demo-mode-toggle').checked;
+            const targetUrl = `/api/predict_target?lat=${currentLat}&lon=${currentLon}&demo=${isDemo}`;
+
+            try {
+                const res = await fetch(targetUrl);
+                const data = await res.json();
+
+                if (!res.ok || data.status !== "success") {
+                    console.error("Pipeline API error", data);
+                    return;
+                }
+
+                forecastData = data;
+
+                // Toggle warning banner
+                const banner = document.getElementById('coverage-banner');
+                if (data.coverage_found) {
+                    banner.classList.add('hidden');
+                } else {
+                    banner.classList.remove('hidden');
+                }
+
+                // Cache countdown
+                if (data.cache.was_cached || isDemo) {
+                    startCacheCountdown(data.cache.expires_in_sec);
+                } else {
+                    startCacheCountdown(300);
+                }
+
+                // Meteorology display
+                const met = data.meteorology;
+                document.getElementById('met-temp').innerText = `${met.temperature.toFixed(1)} °C`;
+                document.getElementById('met-humidity').innerText = `${met.humidity.toFixed(1)} %`;
+                document.getElementById('met-rain').innerText = `${met.rain_intensity.toFixed(2)} mm/h`;
+                document.getElementById('met-wind').innerText = `${met.wind_speed.toFixed(1)} km/h`;
+                
+                // Rotation needle
+                const windNeedle = document.getElementById('wind-needle');
+                const angleDegrees = met.wind_direction;
+                windNeedle.style.transform = `rotate(${angleDegrees}deg)`;
+                
+                let dirText = "N";
+                if (angleDegrees > 22.5 && angleDegrees <= 67.5) dirText = "NE";
+                else if (angleDegrees > 67.5 && angleDegrees <= 112.5) dirText = "E";
+                else if (angleDegrees > 112.5 && angleDegrees <= 157.5) dirText = "SE";
+                else if (angleDegrees > 157.5 && angleDegrees <= 202.5) dirText = "S";
+                else if (angleDegrees > 202.5 && angleDegrees <= 247.5) dirText = "SW";
+                else if (angleDegrees > 247.5 && angleDegrees <= 292.5) dirText = "W";
+                else if (angleDegrees > 292.5 && angleDegrees <= 337.5) dirText = "NW";
+                
+                document.getElementById('met-wind-dir').innerText = `Angle: ${angleDegrees.toFixed(0)}° (${dirText})`;
+
+                // Latencies
+                const bench = data.benchmarks;
+                const fnoTimeLabel = document.getElementById('bench-fno-time');
+                if (bench.fno_active) {
+                    fnoTimeLabel.innerText = `${bench.fno_time_ms.toFixed(2)} ms`;
+                    fnoTimeLabel.className = "text-emerald-555 dark:text-emerald-400 font-bold";
+                } else {
+                    fnoTimeLabel.innerText = "Fallback Mode active";
+                    fnoTimeLabel.className = "text-amber-550 dark:text-amber-500 font-mono text-[9px]";
+                }
+                document.getElementById('bench-adv-time').innerText = `${bench.advection_time_ms.toFixed(2)} ms`;
+
+                // Re-render
+                updateCanvases();
+                if (showTechSpecs) {
+                    updateAnalyticsChart(data);
+                }
+
+            } catch (err) {
+                console.error("Connection to Weather Union nowcasting loop failed:", err);
+            }
+        }
+
+        window.onload = () => {
+            // Load theme configuration
+            initTheme();
+            
+            // Start polling background calibration progress
+            startCalibrationPolling();
+            
+            // Listen to demo mode changes to trigger refresh
+            document.getElementById('demo-mode-toggle').addEventListener('change', runInferencePipeline);
+        };
+    </script>
+</body>
+</html>
