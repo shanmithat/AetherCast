@@ -32,7 +32,7 @@ GRID_RES = 32
 BOX_KM = 15
 MINUTES_PER_STEP = 5
 WU_BASE_URL = "https://www.weatherunion.com/gw/weather/external/v0/get_weather_data"
-WEATHER_UNION_API_KEY = os.environ.get("WEATHER_UNION_API_KEY", "25cd47fb79ad1739fc6bd11112a29fc2")
+WEATHER_UNION_API_KEY = os.environ.get("WEATHER_UNION_API_KEY")
 
 # =====================================================================
 # FNO MODEL
