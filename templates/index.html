@@ -262,7 +262,7 @@
                                 </h2>
                                 <!-- Demo Mode Toggle -->
                                 <label class="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" id="demo-mode-toggle" class="sr-only peer">
+                                    <input type="checkbox" id="demo-mode-toggle" class="sr-only peer" checked>
                                     <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 peer-checked:after:bg-white"></div>
                                     <span class="ml-2 text-xs font-mono theme-text-secondary">Demo Rain</span>
                                 </label>
@@ -487,7 +487,7 @@
                                     </div>
                                     <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
                                         <span class="theme-text-secondary">FNO Model Params</span>
-                                        <span class="theme-text-primary">106,264</span>
+                                        <span id="bench-params" class="theme-text-primary">106,264</span>
                                     </div>
                                     <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
                                         <span class="theme-text-secondary">FNO Latency</span>
@@ -495,7 +495,7 @@
                                     </div>
                                     <div class="flex justify-between items-center theme-inner-bg p-2 rounded-lg border theme-inner-border">
                                         <span class="theme-text-secondary">Physics Solver</span>
-                                        <span class="text-indigo-500 font-bold">-- ms</span>
+                                        <span id="bench-adv-time" class="text-indigo-500 font-bold">-- ms</span>
                                     </div>
                                 </div>
                             </div>
