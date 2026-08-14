@@ -10,7 +10,7 @@ class PhysicsInformedLoss(nn.Module):
     ∂u/∂t + cx * ∂u/∂x + cy * ∂u/∂y - D * (∂²u/∂x² + ∂²u/∂y²) + λd * u = 0
     
     Uses 2D finite difference convolutional stencils with circular padding to ensure
-    second-order spatial accuracy across boundaries, avoiding boundary error propagation.
+    central-difference spatial derivative stencils with periodic/circular boundary handling.
     """
     def __init__(self, dx=30.0/32.0, dy=30.0/32.0, dt=5.0/60.0, D=0.015 * (30.0/32.0)**2 / (5.0/60.0), lambda_d=0.3):
         """
@@ -19,8 +19,7 @@ class PhysicsInformedLoss(nn.Module):
             dy (float): Spatial grid stride along rows (km).
             dt (float): Time step increment (hours).
             D (float): Diffusion coefficient (km²/hour).
-            lambda_d (float): Continuous physical decay rate (hour^-1). Mapped from discrete decay:
-                              discrete_decay = 0.025 per step (5 mins) -> lambda_d = 0.025 * 12 = 0.3.
+            lambda_d (float): Continuous physical decay rate (hour^-1).
         """
         super(PhysicsInformedLoss, self).__init__()
         self.dx = dx
@@ -29,18 +28,17 @@ class PhysicsInformedLoss(nn.Module):
         self.D = D
         self.lambda_d = lambda_d
 
-        # Pre-compile finite difference stencils as fixed convolutional weights (1, 1, 3, 3)
-        # Central difference for 1st derivative along x (columns)
+        # Central difference stencil for 1st derivative along x (columns)
         weight_dx_tensor = torch.tensor([[[[0.0, 0.0, 0.0], [-0.5, 0.0, 0.5], [0.0, 0.0, 0.0]]]]) / dx
-        self.weight_dx = nn.Parameter(weight_dx_tensor, requires_grad=False)
+        self.register_buffer("weight_dx", weight_dx_tensor)
         
-        # Central difference for 1st derivative along y (rows)
+        # Central difference stencil for 1st derivative along y (rows)
         weight_dy_tensor = torch.tensor([[[[0.0, -0.5, 0.0], [0.0, 0.0, 0.0], [0.0, 0.5, 0.0]]]]) / dy
-        self.weight_dy = nn.Parameter(weight_dy_tensor, requires_grad=False)
+        self.register_buffer("weight_dy", weight_dy_tensor)
         
-        # 5-point discrete Laplacian stencil for 2nd spatial derivatives (scaled by dx * dy)
-        weight_laplacian_tensor = torch.tensor([[[[0.0, 1.0, 0.0], [1.0, -4.0, 1.0], [0.0, 1.0, 0.0]]]]) / (dx * dy)
-        self.weight_laplacian = nn.Parameter(weight_laplacian_tensor, requires_grad=False)
+        # 5-point discrete Laplacian stencil scaled by dx² and dy² for the square-grid case
+        weight_laplacian_tensor = torch.tensor([[[[0.0, 1.0, 0.0], [1.0, -4.0, 1.0], [0.0, 1.0, 0.0]]]]) / (dx ** 2)
+        self.register_buffer("weight_laplacian", weight_laplacian_tensor)
 
     def forward(self, u_pred, x_input):
         """
@@ -69,7 +67,7 @@ class PhysicsInformedLoss(nn.Module):
         # Apply circular padding to handle periodic boundary conditions without boundary artifacts
         u_padded = F.pad(u_slice, (1, 1, 1, 1), mode='circular')
 
-        # Apply spatial stencils via 2D Convolutions
+        # Apply spatial stencils via 2D Convolutions using registered buffer weights
         du_dx = F.conv2d(u_padded, self.weight_dx)
         du_dy = F.conv2d(u_padded, self.weight_dy)
         laplacian = F.conv2d(u_padded, self.weight_laplacian)

@@ -1,0 +1,10 @@
+test_size,model,mse,rel_l2,pinn,latency
+100,PI-FNO,5.481 ± 4.039,0.451 ± 0.115,33.82 ± 27.56,24.663 ms
+100,Data-Driven FNO,5.509 ± 3.970,0.454 ± 0.111,54.08 ± 43.38,21.861 ms
+100,FD Solver,reference,reference,76.91 ± 79.72,2.428 ms
+500,PI-FNO,5.918 ± 4.849,0.473 ± 0.119,34.09 ± 28.57,21.967 ms
+500,Data-Driven FNO,6.031 ± 5.063,0.476 ± 0.117,52.15 ± 41.36,21.801 ms
+500,FD Solver,reference,reference,65.11 ± 56.96,2.438 ms
+1000,PI-FNO,6.344 ± 5.437,0.483 ± 0.116,36.40 ± 33.76,23.320 ms
+1000,Data-Driven FNO,6.514 ± 5.745,0.488 ± 0.119,54.63 ± 46.54,22.326 ms
+1000,FD Solver,reference,reference,66.33 ± 58.25,2.831 ms

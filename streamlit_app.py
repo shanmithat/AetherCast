@@ -1,12 +1,20 @@
 import os
 import time
 import math
-import random
 import requests
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+
+# Import unified configuration, physics, and model structures from aethercast
+from aethercast.config import (
+    GRID_RES, BOX_KM, MINUTES_PER_STEP, PREDICTION_STEPS, WU_BASE_URL, WEATHER_UNION_API_KEY
+)
+from aethercast.physics import (
+    sample_stations, idw_interpolate, mean_wind_vector, geocode_city if 'geocode_city' in globals() else None
+)
+from aethercast.solvers import run_discrete_transport_reference
 
 # Set page config
 st.set_page_config(
@@ -21,125 +29,13 @@ try:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+    from aethercast.models.fno2d import FNO2d
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
 
-# =====================================================================
-# CONFIG & GLOBALS
-# =====================================================================
-GRID_RES = 32
-BOX_KM = 15
-MINUTES_PER_STEP = 5
-WU_BASE_URL = "https://www.weatherunion.com/gw/weather/external/v0/get_weather_data"
-WEATHER_UNION_API_KEY = os.environ.get("WEATHER_UNION_API_KEY")
-
-# =====================================================================
-# FNO MODEL
-# =====================================================================
-if TORCH_AVAILABLE:
-    try:
-        from aethercast.models.fno2d import FNO2d
-        from aethercast.models.layers import SpectralConv2d
-    except ImportError:
-        from models.fno2d import FNO2d
-        from models.layers import SpectralConv2d
-
-# =====================================================================
-# PHYSICAL ADVECTION-DIFFUSION UTILITIES
-# =====================================================================
-def shift2d(field, d_row, d_col):
-    out = np.zeros_like(field)
-    rows, cols = field.shape
-    sr0, sr1 = max(0, -d_row), min(rows, rows - d_row)
-    dr0, dr1 = max(0, d_row), min(rows, rows + d_row)
-    sc0, sc1 = max(0, -d_col), min(cols, cols - d_col)
-    dc0, dc1 = max(0, d_col), min(cols, cols + d_col)
-    if sr1 > sr0 and sc1 > sc0:
-        out[dr0:dr1, dc0:dc1] = field[sr0:sr1, sc0:sc1]
-    return out
-
-def diffuse2d(field, diffusion_factor=0.03):
-    if diffusion_factor <= 0:
-        return field
-    left = np.roll(field, -1, axis=1)
-    right = np.roll(field, 1, axis=1)
-    up = np.roll(field, -1, axis=0)
-    down = np.roll(field, 1, axis=0)
-    out = (1.0 - 4.0 * diffusion_factor) * field + diffusion_factor * (left + right + up + down)
-    return out
-
-def generate_synthetic_data(num_samples=128):
-    X, Y = [], []
-    x_grid, y_grid = np.meshgrid(np.arange(GRID_RES), np.arange(GRID_RES), indexing='ij')
-    for _ in range(num_samples):
-        rain = np.zeros((GRID_RES, GRID_RES), dtype=np.float32)
-        num_blobs = random.randint(1, 3)
-        for _ in range(num_blobs):
-            cx, cy = random.randint(4, GRID_RES-4), random.randint(4, GRID_RES-4)
-            r = random.uniform(2.5, 5.5)
-            intensity = random.uniform(6.0, 35.0)
-            dist2 = (x_grid - cx)**2 + (y_grid - cy)**2
-            rain += intensity * np.exp(-dist2 / (2 * r**2))
-        u = random.uniform(-16.0, 16.0)
-        v = random.uniform(-16.0, 16.0)
-        u_field = np.full((GRID_RES, GRID_RES), u, dtype=np.float32)
-        v_field = np.full((GRID_RES, GRID_RES), v, dtype=np.float32)
-        x_sample = np.stack([rain, u_field, v_field], axis=-1)
-        
-        y_sample = np.zeros((24, GRID_RES, GRID_RES), dtype=np.float32)
-        for step in range(24):
-            t_hours = ((step + 1) * MINUTES_PER_STEP) / 60.0
-            shift_lat_km = v * t_hours
-            shift_lon_km = u * t_hours
-            shift_rows = int(round(shift_lat_km / (2 * BOX_KM) * GRID_RES))
-            shift_cols = int(round(shift_lon_km / (2 * BOX_KM) * GRID_RES))
-            shifted = shift2d(rain, shift_rows, shift_cols)
-            diffused = diffuse2d(shifted, diffusion_factor=0.015 * (step + 1))
-            decay = max(0.0, 1.0 - 0.025 * (step + 1))
-            y_sample[step] = diffused * decay
-        X.append(x_sample)
-        Y.append(y_sample)
-    return torch.tensor(np.array(X)), torch.tensor(np.array(Y))
-
-# Cache training calibration
-@st.cache_resource
-def train_and_cache_fno():
-    if not TORCH_AVAILABLE:
-        return None
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = FNO2d().to(device)
-    X, Y = generate_synthetic_data(128)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=30, eta_min=1e-4)
-    criterion = nn.MSELoss()
-    
-    # Progress monitor in streamlit
-    progress_bar = st.progress(0, text="Calibrating Neural Operator Model...")
-    for epoch in range(30):
-        model.train()
-        epoch_loss = 0
-        indices = torch.randperm(len(X))
-        for i in range(0, len(X), 32):
-            batch_idx = indices[i:i+32]
-            bx = X[batch_idx].to(device)
-            by = Y[batch_idx].to(device)
-            optimizer.zero_grad()
-            out = model(bx)
-            loss = criterion(out, by)
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item() * bx.size(0)
-        scheduler.step()
-        progress_bar.progress((epoch+1)/30, text=f"Calibrating Neural Operator Model: Epoch {epoch+1}/30")
-    
-    progress_bar.empty()
-    return model
-
-# =====================================================================
-# GEOLOCATION & STATIONS DATA
-# =====================================================================
-def geocode_city(city_name):
+# Helper for geolocation (using Nominatim openstreetmap API)
+def geocode_location(city_name):
     try:
         url = f"https://nominatim.openstreetmap.org/search?format=json&q={requests.utils.quote(city_name)}&limit=1"
         res = requests.get(url, headers={'User-Agent': 'AetherCastStreamlit/2.0'}, timeout=5)
@@ -151,83 +47,25 @@ def geocode_city(city_name):
         pass
     return None
 
-def fetch_station_data(lat, lon):
-    if not WEATHER_UNION_API_KEY:
-        return None
-    headers = {"x-zomato-api-key": WEATHER_UNION_API_KEY}
-    params = {"latitude": lat, "longitude": lon}
-    try:
-        resp = requests.get(WU_BASE_URL, headers=headers, params=params, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("status") in ["200", 200]:
-                return data.get("locality_weather_data", {})
-    except Exception:
-        pass
-    return None
-
-def build_weather_field(center_lat, center_lon, met, demo_mode=False):
-    stations = []
-    stations.append({
-        "lat": center_lat, "lon": center_lon,
-        "rain_intensity": met["rain_intensity"],
-        "wind_speed": met["wind_speed"],
-        "wind_direction": met["wind_direction"]
-    })
-    dlat = BOX_KM / 166.5
-    dlon = BOX_KM / (166.5 * math.cos(math.radians(center_lat)))
-    offsets = [(dlat, 0, 0.7), (-dlat, 0, 1.2), (0, dlon, 0.8), (0, -dlon, 1.1)]
-    for lat_off, lon_off, rain_mult in offsets:
-        p_rain = met["rain_intensity"] * rain_mult if met["rain_intensity"] > 0 else 0.0
-        stations.append({
-            "lat": center_lat + lat_off, "lon": center_lon + lon_off,
-            "rain_intensity": p_rain, "wind_speed": met["wind_speed"],
-            "wind_direction": met["wind_direction"]
-        })
-    return stations
-
-def idw_interpolate(center_lat, center_lon, stations):
-    dlat = BOX_KM / 111.0
-    dlon = BOX_KM / (111.0 * math.cos(math.radians(center_lat)))
-    grid_lats = np.linspace(center_lat - dlat, center_lat + dlat, GRID_RES)
-    grid_lons = np.linspace(center_lon - dlon, center_lon + dlon, GRID_RES)
-    field = np.zeros((GRID_RES, GRID_RES))
-    s_lat = np.array([s["lat"] for s in stations])
-    s_lon = np.array([s["lon"] for s in stations])
-    s_val = np.array([s["rain_intensity"] for s in stations])
-    for i in range(GRID_RES):
-        for j in range(GRID_RES):
-            d = np.hypot(grid_lats[i] - s_lat, grid_lons[j] - s_lon) + 1e-6
-            w = 1.0 / (d ** 2)
-            field[i, j] = np.sum(w * s_val) / np.sum(w)
-    return field
-
-def run_classical_advection(rain_field, u, v):
-    grids = []
-    for step in range(24):
-        t_hours = ((step + 1) * MINUTES_PER_STEP) / 60.0
-        shift_lat_km = v * t_hours
-        shift_lon_km = u * t_hours
-        shift_rows = int(round(shift_lat_km / (2 * BOX_KM) * GRID_RES))
-        shift_cols = int(round(shift_lon_km / (2 * BOX_KM) * GRID_RES))
-        shifted = shift2d(rain_field, shift_rows, shift_cols)
-        diffused = diffuse2d(shifted, diffusion_factor=0.015 * (step + 1))
-        decay = max(0.0, 1.0 - 0.03 * (step + 1))
-        grids.append(diffused * decay)
-    return grids
-
-def run_fno_inference(model, rain_field, u, v):
-    if model is None or not TORCH_AVAILABLE:
+# Load pre-trained model weights from disk
+@st.cache_resource
+def load_fno_model():
+    if not TORCH_AVAILABLE:
         return None
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    u_field = np.full((GRID_RES, GRID_RES), u, dtype=np.float32)
-    v_field = np.full((GRID_RES, GRID_RES), v, dtype=np.float32)
-    input_np = np.stack([rain_field, u_field, v_field], axis=-1)
-    in_tensor = torch.tensor(input_np, dtype=torch.float32, device=device).unsqueeze(0)
-    model.eval()
-    with torch.inference_mode():
-        fno_out = model(in_tensor).squeeze(0).cpu().numpy()
-    return np.maximum(0.0, fno_out)
+    model = FNO2d().to(device)
+    weights_path = "fno_weights.pt"
+    if os.path.exists(weights_path):
+        try:
+            state = torch.load(weights_path, map_location=device, weights_only=True)
+            model.load_state_dict(state)
+            model.eval()
+            return model
+        except Exception as e:
+            st.sidebar.error(f"Error loading {weights_path}: {e}")
+    else:
+        st.sidebar.warning(f"Weights file {weights_path} not found. Running advection fallback only.")
+    return None
 
 # =====================================================================
 # CUSTOM COLOR MAPPING
@@ -243,8 +81,8 @@ norm = mcolors.BoundaryNorm(bounds, cmap.N)
 st.title("⛈️ AETHERCAST // Neural Weather Nowcasting Portal")
 st.write("2D Fourier Neural Operator weather projections powered by Weather Union API.")
 
-# Load FNO
-model = train_and_cache_fno()
+# Load FNO Model
+model = load_fno_model()
 
 # Sidebar inputs
 st.sidebar.header("🎯 Target Parameters")
@@ -269,7 +107,7 @@ if "lat" not in st.session_state:
 
 # Trigger Search / Presets
 if search_query:
-    res = geocode_city(search_query)
+    res = geocode_location(search_query)
     if res:
         st.session_state.lat, st.session_state.lon, st.session_state.city = res
 elif preset_selection != "None":
@@ -282,41 +120,47 @@ if st.session_state.lat is None:
 else:
     # Fetch API weather stats
     with st.spinner("Fetching Locality Weather Data..."):
-        met = {
-            "temperature": 24.5, "humidity": 65.0, "wind_speed": 8.0, "wind_direction": 120.0, "rain_intensity": 0.0
-        }
-        
-        if demo_mode:
-            met["rain_intensity"] = 18.5
-            met["wind_speed"] = 14.5
-            met["wind_direction"] = 135.0
-            met["temperature"] = 22.8
-            met["humidity"] = 88.0
+        stations, coverage_found, met, cache_ttl, was_cached = sample_stations(st.session_state.lat, st.session_state.lon, demo_mode)
+        if coverage_found and not demo_mode:
+            st.sidebar.success("Weather Union API: Station data loaded successfully.")
+        elif demo_mode:
             st.sidebar.success("Demo Mode: Synthesizing rainfall cells.")
         else:
-            wu_data = fetch_station_data(st.session_state.lat, st.session_state.lon)
-            if wu_data:
-                met["temperature"] = wu_data.get("temperature") or 25.0
-                met["humidity"] = wu_data.get("humidity") or 70.0
-                met["wind_speed"] = wu_data.get("wind_speed") or 5.0
-                met["wind_direction"] = wu_data.get("wind_direction") or 90.0
-                met["rain_intensity"] = wu_data.get("rain_intensity") or 0.0
-                st.sidebar.success("Weather Union API: Station data loaded successfully.")
-            else:
-                st.sidebar.warning("Locality outside Weather Union coverage. Showing flat forecast.")
+            st.sidebar.warning("Locality outside Weather Union coverage. Showing flat forecast.")
 
-    # Compute Wind Vector
-    rad = math.radians(met["wind_direction"])
-    u = -met["wind_speed"] * math.sin(rad)
-    v = -met["wind_speed"] * math.cos(rad)
+    # Compute Wind Vector U and V
+    u, v = mean_wind_vector(stations)
 
     # Spatial fields interpolation
-    stations = build_weather_field(st.session_state.lat, st.session_state.lon, met, demo_mode)
     rain_field = idw_interpolate(st.session_state.lat, st.session_state.lon, stations)
 
     # Run Forecast Models
-    grids_adv = run_classical_advection(rain_field, u, v)
-    grids_fno = run_fno_inference(model, rain_field, u, v)
+    grids_adv = run_discrete_transport_reference(rain_field, u, v)
+    
+    grids_fno = None
+    fno_time_ms = 0.0
+    if model is not None and TORCH_AVAILABLE:
+        try:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            u_field = np.full((GRID_RES, GRID_RES), u, dtype=np.float32)
+            v_field = np.full((GRID_RES, GRID_RES), v, dtype=np.float32)
+            input_np = np.stack([rain_field, u_field, v_field], axis=-1)
+            in_tensor = torch.tensor(input_np, dtype=torch.float32, device=device).unsqueeze(0)
+            
+            # Run inference timing with CUDA synchronization if GPU is active
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            t_start = time.perf_counter()
+            with torch.inference_mode():
+                fno_out = model(in_tensor).squeeze(0).cpu().numpy()
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            fno_time_ms = (time.perf_counter() - t_start) * 1000
+            
+            grids_fno = np.maximum(0.0, fno_out)
+        except Exception as e:
+            st.sidebar.error(f"Inference error: {e}")
+            
     if grids_fno is None:
          grids_fno = grids_adv
 
@@ -395,6 +239,8 @@ else:
         st.subheader("Speed Benchmarks")
         dev = "GPU (CUDA Target)" if (TORCH_AVAILABLE and torch.cuda.is_available()) else "CPU (Fallback)"
         st.write(f"**Inference Device**: {dev}")
+        if model is not None:
+            st.write(f"**Single-Trajectory Forward Latency**: {fno_time_ms:.3f} ms")
         
         # Compare volume dynamics chart
         st.subheader("Regional Rain Volume Dynamics Curve")

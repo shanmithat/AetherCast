@@ -6,7 +6,7 @@
     <title>AetherCast // FNO-2D Weather Nowcasting Engine</title>
     
     <!-- SEO Metadata -->
-    <meta name="description" content="Fourier Neural Operator (FNO) weather nowcasting engine powered by the Weather Union API. Real-time predictive radar using deep operator learning.">
+    <meta name="description" content="Fourier Neural Operator (FNO) weather nowcasting portal powered by the Weather Union API. Physics-informed FNO model for 2D transport simulation and weather-data-driven local precipitation nowcasting.">
     
     <!-- Typography & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -365,7 +365,7 @@
                                     <canvas id="main-forecast-canvas" width="288" height="288" class="rounded-xl border theme-inner-border shadow-2xl relative z-10"></canvas>
                                     
                                     <!-- Scanning sweep loader -->
-                                    <div id="canvas-radar-overlay" class="absolute inset-0 border theme-inner-border bg-slate-950/95 dark:bg-slate-950/90 rounded-xl flex items-center justify-center">
+                                    <div id="canvas-loading-overlay" class="absolute inset-0 border theme-inner-border bg-slate-950/95 dark:bg-slate-950/90 rounded-xl flex items-center justify-center">
                                         <div class="w-48 h-48 rounded-full border border-indigo-900/40 relative flex items-center justify-center overflow-hidden">
                                             <div class="w-32 h-32 rounded-full border border-indigo-900/30"></div>
                                             <div class="w-16 h-16 rounded-full border border-indigo-900/20"></div>
@@ -376,7 +376,7 @@
 
                                     <!-- Legend -->
                                     <div class="absolute bottom-2 left-2 theme-inner-bg border theme-inner-border rounded-lg p-2 flex flex-col gap-1 text-[8px] font-mono theme-text-secondary select-none z-20 shadow-lg">
-                                        <span class="theme-text-primary font-bold border-b theme-inner-border pb-0.5 mb-0.5 uppercase">Rain Rate (mm/h)</span>
+                                        <span class="theme-text-primary font-bold border-b theme-inner-border pb-0.5 mb-0.5 uppercase">Rain Rate (Model Units)</span>
                                         <div class="flex items-center gap-1.5">
                                             <div class="w-3.5 h-2 rounded bg-[#068cc8]"></div><span>0 - 2 (Light)</span>
                                         </div>
@@ -692,8 +692,8 @@
                     document.getElementById('dashboard-active-city').innerText = activeLocName;
                     document.getElementById('dashboard-active-coords').innerText = `${currentLat.toFixed(4)}° N, ${currentLon.toFixed(4)}° E`;
                     
-                    // Clear radar sweep overlay
-                    document.getElementById('canvas-radar-overlay').classList.add('hidden');
+                    // Clear loading sweep overlay
+                    document.getElementById('canvas-loading-overlay').classList.add('hidden');
 
                     // Run pipeline
                     runInferencePipeline();
@@ -725,7 +725,7 @@
             document.getElementById('main-dashboard').classList.add('hidden');
             document.getElementById('welcome-panel').classList.remove('hidden');
             
-            document.getElementById('canvas-radar-overlay').classList.remove('hidden');
+            document.getElementById('canvas-loading-overlay').classList.remove('hidden');
         }
 
         // Preset loader
@@ -743,7 +743,7 @@
             document.getElementById('dashboard-active-city').innerText = name;
             document.getElementById('dashboard-active-coords').innerText = `${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`;
             
-            document.getElementById('canvas-radar-overlay').classList.add('hidden');
+            document.getElementById('canvas-loading-overlay').classList.add('hidden');
             
             runInferencePipeline();
         }
@@ -772,7 +772,7 @@
                     document.getElementById('dashboard-active-city').innerText = "My Location";
                     document.getElementById('dashboard-active-coords').innerText = `${currentLat.toFixed(4)}° N, ${currentLon.toFixed(4)}° E`;
                     
-                    document.getElementById('canvas-radar-overlay').classList.add('hidden');
+                    document.getElementById('canvas-loading-overlay').classList.add('hidden');
                     
                     runInferencePipeline();
                 },
@@ -982,7 +982,7 @@
                 } else if (globalMax >= 2) {
                     rainType = "moderate rain showers";
                 }
-                outlookText = `Rainfall is projected to peak in ${peakMins} mins with ${rainType} (max intensity: ${globalMax.toFixed(1)} mm/h).`;
+                outlookText = `Rainfall is projected to peak in ${peakMins} mins with ${rainType} (max intensity: ${globalMax.toFixed(1)} model units).`;
             }
 
             let stepText = "";
@@ -1050,8 +1050,8 @@
                         if(advFrame[r][c] > maxAdv) maxAdv = advFrame[r][c];
                     }
                 }
-                document.getElementById('fno-metric').innerText = `Max Rain Rate: ${maxFno.toFixed(2)} mm/h`;
-                document.getElementById('adv-metric').innerText = `Max Rain Rate: ${maxAdv.toFixed(2)} mm/h`;
+                document.getElementById('fno-metric').innerText = `Max Intensity: ${maxFno.toFixed(2)} model units`;
+                document.getElementById('adv-metric').innerText = `Max Intensity: ${maxAdv.toFixed(2)} model units`;
             }
 
             // Timeline labels
@@ -1186,7 +1186,7 @@
                             ticks: { color: tickColor, font: { family: 'Fira Code', size: 9 } },
                             title: {
                                 display: true,
-                                text: 'Avg Rainfall Intensity (mm/h)',
+                                text: 'Avg Rainfall Intensity (Model Units)',
                                 color: tickColor,
                                 font: { family: 'Inter', size: 10 }
                             }
