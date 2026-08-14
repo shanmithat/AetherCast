@@ -189,7 +189,7 @@
                     </div>
                     <h2 class="text-3xl font-extrabold font-outfit tracking-tight">Initialize Nowcasting Engine</h2>
                     <p class="theme-text-secondary text-sm max-w-md mx-auto leading-relaxed">
-                        AetherCast uses a 2D Fourier Neural Operator (FNO-2D) to run localized, sub-kilometer rain nowcasts for the next 2 hours. Enter your locality to pull live station data and begin.
+                        AetherCast uses a 2D Fourier Neural Operator (FNO-2D) to run localized, model-unit precipitation nowcasts for the next 2 hours. Enter your locality to pull live station data and begin.
                     </p>
                 </div>
 
@@ -378,16 +378,16 @@
                                     <div class="absolute bottom-2 left-2 theme-inner-bg border theme-inner-border rounded-lg p-2 flex flex-col gap-1 text-[8px] font-mono theme-text-secondary select-none z-20 shadow-lg">
                                         <span class="theme-text-primary font-bold border-b theme-inner-border pb-0.5 mb-0.5 uppercase">Rain Rate (Model Units)</span>
                                         <div class="flex items-center gap-1.5">
-                                            <div class="w-3.5 h-2 rounded bg-[#068cc8]"></div><span>0 - 2 (Light)</span>
+                                            <div class="w-3.5 h-2 rounded bg-[#068cc8]"></div><span>0 - 2 (Low)</span>
                                         </div>
                                         <div class="flex items-center gap-1.5">
-                                            <div class="w-3.5 h-2 rounded bg-[#06c8c0]"></div><span>2 - 10 (Moderate)</span>
+                                            <div class="w-3.5 h-2 rounded bg-[#06c8c0]"></div><span>2 - 10 (Medium)</span>
                                         </div>
                                         <div class="flex items-center gap-1.5">
-                                            <div class="w-3.5 h-2 rounded bg-[#1cc806]"></div><span>10 - 25 (Heavy)</span>
+                                            <div class="w-3.5 h-2 rounded bg-[#1cc806]"></div><span>10 - 25 (High)</span>
                                         </div>
                                         <div class="flex items-center gap-1.5">
-                                            <div class="w-3.5 h-2 rounded bg-[#c8b706]"></div><span>25+ (Violent)</span>
+                                            <div class="w-3.5 h-2 rounded bg-[#c8b706]"></div><span>25+ (Extreme)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -450,29 +450,29 @@
                     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         <!-- Left 4 cols: Performance & Calibration -->
                         <div class="lg:col-span-5 space-y-6">
-                            <!-- Calibration Badge & Progress -->
-                            <div class="glass-panel rounded-2xl p-5 space-y-4">
-                                <h3 class="text-xs font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
-                                    <i class="fa-solid fa-chart-line text-purple-500"></i> FNO Model Calibration
-                                </h3>
-                                <p class="text-[10px] font-mono theme-text-tertiary leading-normal">
-                                    The Fourier Neural Operator calibrates dynamically on startup against discrete advection-diffusion physics equations.
-                                </p>
-                                
-                                <div class="space-y-2.5 pt-2">
-                                    <div class="flex justify-between items-center text-xs font-mono">
-                                        <span class="theme-text-secondary">Training Epochs</span>
-                                        <span id="calib-progress-txt" class="theme-text-primary">0/30</span>
-                                    </div>
-                                    <div class="w-full theme-inner-bg rounded-full h-1.5 border theme-inner-border overflow-hidden">
-                                        <div id="calib-progress-bar" class="bg-gradient-to-r from-purple-500 to-indigo-500 h-1.5 w-0 transition-all duration-300"></div>
-                                    </div>
-                                    <div class="flex justify-between items-center text-[10px] font-mono">
-                                        <span class="theme-text-secondary">Cal Loss (MSE)</span>
-                                        <span id="calib-loss-val" class="text-purple-500 font-bold">--</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <!-- FNO Configuration Details -->
+                             <div class="glass-panel rounded-2xl p-5 space-y-4">
+                                 <h3 class="text-xs font-bold font-outfit uppercase tracking-wider theme-text-secondary flex items-center gap-2">
+                                     <i class="fa-solid fa-gear text-purple-500"></i> FNO Configuration
+                                 </h3>
+                                 <p class="text-[10px] font-mono theme-text-tertiary leading-normal">
+                                     The Fourier Neural Operator performs fast inference projections using pre-trained physics-regularized weights.
+                                 </p>
+                                 
+                                 <div class="space-y-2.5 pt-2">
+                                     <div class="flex justify-between items-center text-xs font-mono">
+                                         <span class="theme-text-secondary">Weights Status</span>
+                                         <span id="calib-progress-txt" class="theme-text-primary">Loading...</span>
+                                     </div>
+                                     <div class="w-full theme-inner-bg rounded-full h-1.5 border theme-inner-border overflow-hidden">
+                                         <div id="calib-progress-bar" class="bg-gradient-to-r from-purple-500 to-indigo-500 h-1.5 w-0 transition-all duration-300"></div>
+                                     </div>
+                                     <div class="flex justify-between items-center text-[10px] font-mono">
+                                         <span class="theme-text-secondary">Inference Mode</span>
+                                         <span id="calib-loss-val" class="text-purple-500 font-bold">--</span>
+                                     </div>
+                                 </div>
+                             </div>
 
                             <!-- Speed/Latency Benchmarks -->
                             <div class="glass-panel rounded-2xl p-5 space-y-3.5">
@@ -783,7 +783,7 @@
             );
         }
 
-        // FNO Background training checker
+        // FNO Setup Check Status
         async function checkCalibrationStatus() {
             try {
                 const res = await fetch('/api/engine_status');
@@ -796,33 +796,25 @@
                 const badgePulse = document.getElementById('badge-pulse');
                 const badgeText = document.getElementById('badge-text');
 
-                const epoch = status.epoch;
-                const total = status.total_epochs;
-                const progressPct = (epoch / total) * 100;
-                
-                progressText.innerText = `${epoch}/${total}`;
-                progressBar.style.width = `${progressPct}%`;
-                
-                if (status.loss_history && status.loss_history.length > 0) {
-                    const latestLoss = status.loss_history[status.loss_history.length - 1];
-                    lossVal.innerText = latestLoss.toFixed(6);
-                } else {
-                    lossVal.innerText = "Pending";
-                }
-
                 if (status.status === "ready") {
                     badgePulse.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
                     badgeText.innerText = `Engine: FNO Ready (${status.device})`;
+                    
+                    progressText.innerText = "Loaded";
+                    progressBar.style.width = "100%";
+                    progressBar.className = "bg-gradient-to-r from-emerald-500 to-teal-500 h-1.5 w-full transition-all duration-300";
+                    lossVal.innerText = "Online";
+                    
                     document.getElementById('bench-device').innerText = status.device;
                     document.getElementById('bench-params').innerText = status.param_count.toLocaleString();
                     return true;
-                } else if (status.status === "training") {
-                    badgePulse.className = "w-2 h-2 rounded-full bg-purple-500 animate-pulse";
-                    badgeText.innerText = `Engine: Calibrating...`;
-                    return false;
                 } else {
                     badgePulse.className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
                     badgeText.innerText = "Engine: Fallback Mode";
+                    
+                    progressText.innerText = "Offline";
+                    progressBar.style.width = "0%";
+                    lossVal.innerText = "None";
                     return false;
                 }
             } catch (err) {
@@ -832,18 +824,7 @@
         }
 
         async function startCalibrationPolling() {
-            const isReady = await checkCalibrationStatus();
-            if (!isReady) {
-                const interval = setInterval(async () => {
-                    const ready = await checkCalibrationStatus();
-                    if (ready) {
-                        clearInterval(interval);
-                        if (currentLat !== null && currentLon !== null) {
-                            runInferencePipeline();
-                        }
-                    }
-                }, 1500);
-            }
+            await checkCalibrationStatus();
         }
 
         // Color mapper for rain fields
@@ -974,15 +955,15 @@
                 }
             } else {
                 const peakMins = (globalPeakStep + 1) * 5;
-                let rainType = "light drizzle";
+                let rainType = "low projected intensity";
                 if (globalMax >= 25) {
-                    rainType = "violent downpours";
+                    rainType = "extreme projected intensity";
                 } else if (globalMax >= 10) {
-                    rainType = "heavy rain";
+                    rainType = "high projected intensity";
                 } else if (globalMax >= 2) {
-                    rainType = "moderate rain showers";
+                    rainType = "moderate projected intensity";
                 }
-                outlookText = `Rainfall is projected to peak in ${peakMins} mins with ${rainType} (max intensity: ${globalMax.toFixed(1)} model units).`;
+                outlookText = `Precipitation is projected to peak in ${peakMins} mins with ${rainType} (max intensity: ${globalMax.toFixed(1)} model units).`;
             }
 
             let stepText = "";
@@ -1000,16 +981,16 @@
                     iconClass = "fa-sun text-amber-500";
                 }
             } else if (maxRain < 2) {
-                stepText = "Light drizzle falling.";
+                stepText = "Low intensity projection.";
                 iconClass = "fa-cloud-sun-rain text-blue-400";
             } else if (maxRain < 10) {
-                stepText = "Moderate rain showers.";
+                stepText = "Moderate intensity projection.";
                 iconClass = "fa-cloud-rain text-blue-500";
             } else if (maxRain < 25) {
-                stepText = "Heavy rainfall. Commuters proceed with caution.";
+                stepText = "High intensity projection.";
                 iconClass = "fa-cloud-showers-heavy text-indigo-500";
             } else {
-                stepText = "Violent downpour! Risk of localized flash flooding.";
+                stepText = "Extreme intensity projection.";
                 iconClass = "fa-cloud-bolt text-rose-500 animate-pulse";
             }
 

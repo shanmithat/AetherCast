@@ -154,7 +154,7 @@ def main():
             pinn_fd.append(pinn_criterion(out_fd_tensor, bx_device).item())
             
         results.append({
-            "test_size": size, "model": "FD Solver",
+            "test_size": size, "model": "Discrete Transport Reference",
             "mse": "reference", "rel_l2": "reference",
             "pinn": f"{np.mean(pinn_fd):.2f} ± {np.std(pinn_fd):.2f}",
             "latency": f"{np.mean(latency_fd) * 1000:.3f} ms"

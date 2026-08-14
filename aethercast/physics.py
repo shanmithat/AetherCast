@@ -2,7 +2,7 @@ import math
 import numpy as np
 import requests
 import time
-from aethercast.config import GRID_RES, BOX_KM, WU_BASE_URL, WEATHER_UNION_API_KEY, CACHE_TTL_SECONDS
+from aethercast.config import GRID_RES, BOX_KM, WU_BASE_URL, WEATHER_UNION_API_KEY, CACHE_TTL_SECONDS, DX, DY
 
 # Cache station pulls: (lat, lon, demo) -> (timestamp, stations_list, coverage_found, met_dict)
 _station_cache = {}
@@ -120,9 +120,9 @@ def idw_interpolate(center_lat, center_lon, stations, power=2):
     """
     field = np.zeros((GRID_RES, GRID_RES))
     
-    # Local grid offsets in kilometers
-    y_coords = np.linspace(-BOX_KM, BOX_KM, GRID_RES)  # rows
-    x_coords = np.linspace(-BOX_KM, BOX_KM, GRID_RES)  # cols
+    # Local grid offsets in kilometers using exact DX and DY spacing
+    y_coords = (np.arange(GRID_RES) - (GRID_RES - 1) / 2.0) * DY  # rows
+    x_coords = (np.arange(GRID_RES) - (GRID_RES - 1) / 2.0) * DX  # cols
     
     s_y = []
     s_x = []

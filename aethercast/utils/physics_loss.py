@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from aethercast.config import DX, DY, DT, DIFFUSION_COEFF, DECAY_RATE
 
 class PhysicsInformedLoss(nn.Module):
     """
@@ -12,7 +13,7 @@ class PhysicsInformedLoss(nn.Module):
     Uses 2D finite difference convolutional stencils with circular padding to ensure
     central-difference spatial derivative stencils with periodic/circular boundary handling.
     """
-    def __init__(self, dx=30.0/32.0, dy=30.0/32.0, dt=5.0/60.0, D=0.015 * (30.0/32.0)**2 / (5.0/60.0), lambda_d=0.3):
+    def __init__(self, dx=DX, dy=DY, dt=DT, D=DIFFUSION_COEFF, lambda_d=DECAY_RATE):
         """
         Args:
             dx (float): Spatial grid stride along columns (km).

@@ -1,10 +1,10 @@
 test_size,model,mse,rel_l2,pinn,latency
-100,PI-FNO,5.481 ± 4.039,0.451 ± 0.115,33.82 ± 27.56,24.663 ms
-100,Data-Driven FNO,5.509 ± 3.970,0.454 ± 0.111,54.08 ± 43.38,21.861 ms
-100,FD Solver,reference,reference,76.91 ± 79.72,2.428 ms
-500,PI-FNO,5.918 ± 4.849,0.473 ± 0.119,34.09 ± 28.57,21.967 ms
-500,Data-Driven FNO,6.031 ± 5.063,0.476 ± 0.117,52.15 ± 41.36,21.801 ms
-500,FD Solver,reference,reference,65.11 ± 56.96,2.438 ms
-1000,PI-FNO,6.344 ± 5.437,0.483 ± 0.116,36.40 ± 33.76,23.320 ms
-1000,Data-Driven FNO,6.514 ± 5.745,0.488 ± 0.119,54.63 ± 46.54,22.326 ms
-1000,FD Solver,reference,reference,66.33 ± 58.25,2.831 ms
+100,PI-FNO,4.858 ± 4.179,0.398 ± 0.146,45.67 ± 35.73,28.684 ms
+100,Data-Driven FNO,5.270 ± 4.361,0.415 ± 0.142,80.35 ± 62.22,24.086 ms
+100,Discrete Transport Reference,reference,reference,51.13 ± 64.05,2.405 ms
+500,PI-FNO,6.086 ± 6.506,0.439 ± 0.167,46.70 ± 39.18,22.387 ms
+500,Data-Driven FNO,6.545 ± 6.765,0.455 ± 0.162,77.61 ± 61.06,23.458 ms
+500,Discrete Transport Reference,reference,reference,40.34 ± 43.22,2.662 ms
+1000,PI-FNO,6.787 ± 8.630,0.446 ± 0.166,49.44 ± 44.93,24.637 ms
+1000,Data-Driven FNO,7.335 ± 9.269,0.464 ± 0.160,81.74 ± 70.26,23.855 ms
+1000,Discrete Transport Reference,reference,reference,42.28 ± 46.11,2.483 ms

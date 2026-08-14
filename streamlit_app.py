@@ -12,7 +12,9 @@ from aethercast.config import (
     GRID_RES, BOX_KM, MINUTES_PER_STEP, PREDICTION_STEPS, WU_BASE_URL, WEATHER_UNION_API_KEY
 )
 from aethercast.physics import (
-    sample_stations, idw_interpolate, mean_wind_vector, geocode_city if 'geocode_city' in globals() else None
+    sample_stations,
+    idw_interpolate,
+    mean_wind_vector,
 )
 from aethercast.solvers import run_discrete_transport_reference
 

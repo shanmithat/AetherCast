@@ -144,25 +144,25 @@ We trained FNO models with varying values of the physics regularization weight $
 | 0.05 | 3.952990 ± 3.109842 | 0.475213 ± 0.118942 | 24.748852 ± 19.209841 |
 | 0.1 | 4.359474 ± 3.489109 | 0.497618 ± 0.124109 | 17.073333 ± 12.984102 |
 
-* **Trade-off Analysis**: Increasing $\lambda$ produces a significant reduction in the measured mean-squared PDE residual, dropping from $74.316$ to $17.073$ (a **$77.0\%$ reduction**), while slightly raising the prediction MSE.
+* **Trade-off Analysis**: Increasing $\lambda$ produces a substantial reduction in the measured mean-squared PDE residual, dropping from $74.316$ to $17.073$ (a **$77.0\%$ reduction**), while slightly raising the prediction MSE.
 * **Compromise Point**: Setting $\lambda = 0.01$ provides a favorable trade-off between prediction accuracy and physics residual. Relative to the unconstrained FNO ($\lambda = 0.0$), $\lambda = 0.01$ reduces the PDE residual by **$36.1\%$** while increasing MSE by only **$2.7\%$** and achieving the lowest Relative $L_2$ error.
 
 ### PI-FNO vs. Data-driven FNO
-We compared the Physics-Informed Fourier Neural Operator (PI-FNO, $\lambda = 0.01$) against the unregularized FNO (Data-Driven FNO, $\lambda = 0.0$) and the discrete transport solver on held-out test sets.
+We compared the Physics-Informed Fourier Neural Operator (PI-FNO, $\lambda = 0.01$) against the unregularized FNO (Data-Driven FNO, $\lambda = 0.0$) and the Discrete Transport Reference solver on held-out test sets. Note that the 100, 500, and 1,000-sample evaluation sets are deterministic nested subsets (generated from the same sequence of initial conditions starting at seed 42), whereas the training size and physics weight ablation sweeps are evaluated on the full fixed 1,000-sample test set.
 
 | Test Set Size | Model | Prediction MSE ↓ | Relative $L_2$ Error ↓ | Physics PDE Residual ↓ | Latency |
 | --- | --- | --- | --- | --- | --- |
-| **100** | **PI-FNO** | **5.481 ± 4.039** | **0.451 ± 0.115** | **33.82 ± 27.56** | 24.663 ms |
-| | Data-Driven FNO | 5.509 ± 3.970 | 0.454 ± 0.111 | 54.08 ± 43.38 | 21.861 ms |
-| | FD Solver | *reference* | *reference* | 76.91 ± 79.72 | **2.428 ms** |
-| **500** | **PI-FNO** | **5.918 ± 4.849** | **0.473 ± 0.119** | **34.09 ± 28.57** | 21.967 ms |
-| | Data-Driven FNO | 6.031 ± 5.063 | 0.476 ± 0.117 | 52.15 ± 41.36 | 21.801 ms |
-| | FD Solver | *reference* | *reference* | 65.11 ± 56.96 | **2.438 ms** |
-| **1000**| **PI-FNO** | **6.344 ± 5.437** | **0.483 ± 0.116** | **36.40 ± 33.76** | 23.320 ms |
-| | Data-Driven FNO | 6.514 ± 5.745 | 0.488 ± 0.119 | 54.63 ± 46.54 | 22.326 ms |
-| | FD Solver | *reference* | *reference* | 66.33 ± 58.25 | **2.831 ms** |
+| **100** | **PI-FNO** | **4.858 ± 4.179** | **0.398 ± 0.146** | **45.67 ± 35.73** | 28.684 ms |
+| | Data-Driven FNO | 5.270 ± 4.361 | 0.415 ± 0.142 | 80.35 ± 62.22 | 24.086 ms |
+| | Discrete Transport Reference | *reference* | *reference* | 51.13 ± 64.05 | **2.405 ms** |
+| **500** | **PI-FNO** | **6.086 ± 6.506** | **0.439 ± 0.167** | **46.70 ± 39.18** | 22.387 ms |
+| | Data-Driven FNO | 6.545 ± 6.765 | 0.455 ± 0.162 | 77.61 ± 61.06 | 23.458 ms |
+| | Discrete Transport Reference | *reference* | *reference* | 40.34 ± 43.22 | **2.662 ms** |
+| **1000**| **PI-FNO** | **6.787 ± 8.630** | **0.446 ± 0.166** | **49.44 ± 44.93** | 24.637 ms |
+| | Data-Driven FNO | 7.335 ± 9.269 | 0.464 ± 0.160 | 81.74 ± 70.26 | 23.855 ms |
+| | Discrete Transport Reference | *reference* | *reference* | 42.28 ± 46.11 | **2.483 ms** |
 
-The PI-FNO consistently outperforms the data-driven FNO in both prediction error and PDE residual. On the 1,000-trajectory evaluation, physics-informed training reduced prediction MSE by **$2.6\%$** (6.514 → 6.344) and PDE residual by **$33.4\%$** (54.63 → 36.40).
+The PI-FNO achieves lower mean MSE and PDE residual across all three evaluation sizes than the Data-Driven FNO. On the 1,000-trajectory evaluation, physics-informed training reduced prediction MSE by **$7.5\%$** (7.335 → 6.787) and PDE residual by **$39.5\%$** (81.74 → 49.44).
 
 ### Latency
 Under the current 32×32-grid benchmark, the numpy-based FD implementation is faster per trajectory than neural FNO inference (approximately 2.4–2.8 ms versus 21–24 ms). We therefore do not claim a computational speed advantage for the neural surrogate under this small grid configuration; scaling advantages over larger spatial domains, longer prediction horizons, and batched GPU inference are left for future research.
