@@ -1,12 +1,3 @@
----
-title: Aethercast
-emoji: 👀
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
----
-
 # AetherCast
 
 Lightweight Physics-Informed Fourier Neural Operator for 2D Transport Simulation and Weather-Data-Driven Local Field Visualization.
