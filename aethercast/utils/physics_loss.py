@@ -5,26 +5,29 @@ import torch.nn.functional as F
 class PhysicsInformedLoss(nn.Module):
     """
     Physics-Informed regularizer for 2D Advection-Diffusion transport.
-    Evaluates the residual of the continuous transport equation:
+    Evaluates the residual of the continuous transport equation with physical decay:
     
-    ∂u/∂t + cx * ∂u/∂x + cy * ∂u/∂y - D * (∂²u/∂x² + ∂²u/∂y²) = 0
+    ∂u/∂t + cx * ∂u/∂x + cy * ∂u/∂y - D * (∂²u/∂x² + ∂²u/∂y²) + λd * u = 0
     
     Uses 2D finite difference convolutional stencils with circular padding to ensure
     second-order spatial accuracy across boundaries, avoiding boundary error propagation.
     """
-    def __init__(self, dx=30.0/32.0, dy=30.0/32.0, dt=5.0/60.0, D=0.015 * (30.0/32.0)**2 / (5.0/60.0)):
+    def __init__(self, dx=30.0/32.0, dy=30.0/32.0, dt=5.0/60.0, D=0.015 * (30.0/32.0)**2 / (5.0/60.0), lambda_d=0.3):
         """
         Args:
             dx (float): Spatial grid stride along columns (km).
             dy (float): Spatial grid stride along rows (km).
             dt (float): Time step increment (hours).
             D (float): Diffusion coefficient (km²/hour).
+            lambda_d (float): Continuous physical decay rate (hour^-1). Mapped from discrete decay:
+                              discrete_decay = 0.025 per step (5 mins) -> lambda_d = 0.025 * 12 = 0.3.
         """
         super(PhysicsInformedLoss, self).__init__()
         self.dx = dx
         self.dy = dy
         self.dt = dt
         self.D = D
+        self.lambda_d = lambda_d
 
         # Pre-compile finite difference stencils as fixed convolutional weights (1, 1, 3, 3)
         # Central difference for 1st derivative along x (columns)
@@ -76,8 +79,11 @@ class PhysicsInformedLoss(nn.Module):
         du_dy = du_dy.reshape(batch, time - 1, height, width)
         laplacian = laplacian.reshape(batch, time - 1, height, width)
 
-        # Continuous PDE Residual Evaluation
-        # ∂u/∂t + cx * ∂u/∂x + cy * ∂u/∂y - D * (∂²u/∂x² + ∂²u/∂y²)
-        residual = du_dt + (cx * du_dx) + (cy * du_dy) - (self.D * laplacian)
+        # Reconstruct u_slice_3d to calculate decay term
+        u_slice_3d = u_slice.reshape(batch, time - 1, height, width)
+
+        # Continuous PDE Residual Evaluation (with decay):
+        # ∂u/∂t + cx * ∂u/∂x + cy * ∂u/∂y - D * (∂²u/∂x² + ∂²u/∂y²) + λd * u
+        residual = du_dt + (cx * du_dx) + (cy * du_dy) - (self.D * laplacian) + (self.lambda_d * u_slice_3d)
         
         return torch.mean(residual ** 2)

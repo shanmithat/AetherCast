@@ -18,12 +18,13 @@ The system consists of:
 ### Advection-Diffusion Equation
 The physical transport of precipitation is modeled by the continuous 2D Advection-Diffusion partial differential equation (PDE) with decay:
 
-$$\frac{\partial u}{\partial t} + c_x \frac{\partial u}{\partial x} + c_y \frac{\partial u}{\partial y} - D \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right) = 0$$
+$$\frac{\partial u}{\partial t} + c_x \frac{\partial u}{\partial x} + c_y \frac{\partial u}{\partial y} - D \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right) + \lambda_d u = 0$$
 
 Where:
 * $u(t, x, y)$ is the precipitation density field.
 * $c_x, c_y$ are the spatially uniform wind velocity components (U/V) mapped from local station meteorology.
 * $D$ is the physical diffusion coefficient.
+* $\lambda_d$ is the continuous physical decay rate ($\lambda_d = 0.3 \text{ hour}^{-1}$), mapping to the discrete scaling `decay = max(0.0, 1.0 - 0.025 * (step + 1))` per step.
 
 ### Physics-Informed Loss
 We compute the PDE residual using a pre-compiled, static **2D Finite Difference Convolutional Stencil** with circular padding to ensure second-order spatial accuracy across boundaries:
@@ -101,6 +102,36 @@ The explicit FD solver served as the numerical reference for trajectory generati
 | MSE | 7.9% | 4.5% | 6.2% |
 | Relative L2 | 1.6% | 1.5% | 1.8% |
 | PDE residual | 35.2% | 34.9% | 36.4% |
+
+### Effect of Training Set Size
+We analyzed the influence of the training set size by training the model on varying numbers of synthetic trajectories ($N \in \{64, 128, 256, 512, 1024\}$) with the physics weight fixed at $\lambda_{\text{phy}} = 0.01$. All models were evaluated on the same fixed 1,000-sample test set.
+
+| Training Size | Evaluation MSE | Relative L2 | Physics Residual |
+| --- | --- | --- | --- |
+| 64 | 7.287850 | 0.621721 | 57.841912 |
+| 128 | 5.618910 | 0.543719 | 48.291344 |
+| 256 | 3.869511 | 0.449641 | 47.639341 |
+| 512 | 2.637725 | 0.381342 | 47.420520 |
+| 1024 | 1.504410 | 0.297529 | 43.954590 |
+
+As expected, increasing the training set size significantly reduces both the evaluation MSE (from 7.28 to 1.50) and Relative L2 error, showing a steady scaling behavior. The physics residual also improves as the operator learns a more accurate mapping of the underlying PDE dynamics.
+
+### Effect of Physics Regularization Weight ($\lambda$)
+To explore the regularization trade-off (Pareto boundary), we fixed the training set size at 256 samples and trained FNO models with varying values of the physics regularization weight $\lambda \in \{0.0, 0.001, 0.01, 0.05, 0.1\}$. All models were evaluated on the same fixed 1,000-sample test set.
+
+| Lambda ($\lambda$) | Evaluation MSE | Relative L2 | Physics Residual |
+| --- | --- | --- | --- |
+| 0.0 (Pure Data) | 3.679375 | 0.447178 | 74.316418 |
+| 0.001 | 3.872679 | 0.452987 | 70.058023 |
+| 0.01 | 3.777306 | 0.446050 | 47.474849 |
+| 0.05 | 3.952990 | 0.475213 | 24.748852 |
+| 0.1 | 4.359474 | 0.497618 | 17.073333 |
+
+#### Pareto Trade-off Analysis (MSE vs. Physics Residual)
+The relationship between prediction error (MSE) and physics constraint adherence (PDE residual) as $\lambda$ increases exhibits a classic Pareto boundary:
+* **$\lambda = 0.0$ (Purely Data-Driven)**: Minimizes MSE on the dataset ($3.679$) but suffers from high physics constraint violations ($74.316$).
+* **$\lambda = 0.1$ (Highly Physics-Regularized)**: Forces the network to heavily prioritize physical consistency, reducing PDE residual violations to only **$17.073$** (a **$77.0\%$ drop**), but resulting in a higher prediction MSE ($4.359$).
+* **$\lambda = 0.01$**: Acts as an optimal inflection point, achieving the lowest Relative L2 error ($0.446$) while cutting physical residual violations by **$36.1\%$** compared to the unconstrained FNO.
 
 ## Deployment
 Deployed on Hugging Face Spaces using a Docker SDK configured to bind to port 7860. Alternate local execution can be wrapped via Streamlit.
