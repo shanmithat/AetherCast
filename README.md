@@ -75,28 +75,32 @@ IDW interpolation
 ## Classical Baseline
 A standard step-by-step explicit finite difference simulation of the 2D Advection-Diffusion equation using directional shifts and discrete Laplacian blurs.
 
-## Neural vs Classical Comparison
+## Neural vs. Classical Comparison
 
-We evaluated the performance, generalization capacity, and physical consistency of three configurations across independent, unseen test sets of 100, 500, and 1,000 synthetic weather front trajectories.
+We evaluated two learned configurations—a physics-informed Fourier Neural Operator (PI-FNO) and a data-driven FNO—on independently generated held-out synthetic transport trajectories. The PI-FNO was trained using the combined prediction and PDE-residual objective, whereas the data-driven FNO used prediction loss alone. An explicit finite-difference (FD) solver was used as the numerical reference.
 
-### Evaluation Metrics on Unseen Test Samples
-
-| Test Set Size | Model | Prediction MSE | Relative $L_2$ Error | Physics PDE Residual | Inference Time (per sample) |
+### Evaluation on Unseen Test Samples
+| Test set | Model | Prediction MSE ↓ | Relative L2 ↓ | PDE residual ↓ | Inference time |
 | --- | --- | --- | --- | --- | --- |
-| **100 Samples** | **Physics-Informed FNO (PINN)** | **4.578773** | **0.434540** | **64.625588** | 20.659 ms |
-| | Data-Driven FNO (Pure) | 4.972272 | 0.441572 | 99.674327 | 20.724 ms |
-| | FD Solver (Reference) | *reference* | *reference* | 127.058168 | **2.732 ms** |
-| **500 Samples** | **Physics-Informed FNO (PINN)** | **3.980265** | **0.441117** | **51.782005** | 20.128 ms |
-| | Data-Driven FNO (Pure) | 4.169490 | 0.447622 | 79.552143 | 21.228 ms |
-| | FD Solver (Reference) | *reference* | *reference* | 106.190048 | **2.497 ms** |
-| **1000 Samples**| **Physics-Informed FNO (PINN)** | **3.889951** | **0.446109** | **54.204682** | 20.838 ms |
-| | Data-Driven FNO (Pure) | 4.145194 | 0.454148 | 85.294096 | 20.175 ms |
-| | FD Solver (Reference) | *reference* | *reference* | 111.824264 | **2.064 ms** |
+| 100 | PI-FNO | 4.579 | 0.435 | 64.63 | 20.659 ms |
+| | Data-driven FNO | 4.972 | 0.442 | 99.67 | 20.724 ms |
+| 500 | PI-FNO | 3.980 | 0.441 | 51.78 | 20.128 ms |
+| | Data-driven FNO | 4.169 | 0.448 | 79.55 | 21.228 ms |
+| 1,000 | PI-FNO | 3.890 | 0.446 | 54.20 | 20.838 ms |
+| | Data-driven FNO | 4.145 | 0.454 | 85.29 | 20.175 ms |
 
-### Insights
-1. **Generalization Boost**: Incorporating the physics loss yields a **$6.1\%$ reduction** in prediction MSE (decreasing from $4.145$ to $3.889$) and lowers Relative $L_2$ error, indicating that physical constraints act as a regularizer to prevent overfitting.
-2. **PDE Adherence**: PINN-FNO restricts PDE residual violations by **$36.4\%$** (residual drops from $85.29$ to $54.20$ on 1,000 samples).
-3. **Discretization Paradox**: The classical FD solver accumulates discretization errors over temporal iterations, resulting in a higher physics residual ($111.82$) than the FNO models, proving the noise-filtering advantage of FNO spectral mode truncation.
+The PI-FNO consistently outperformed the data-driven FNO on both prediction error and PDE residual. On the 1,000-trajectory evaluation, physics-informed training reduced prediction MSE by 6.2% (4.145 → 3.890) and PDE residual by 36.4% (85.29 → 54.20). Relative L2 error also decreased from 0.454 to 0.446.
+
+The improvement in PDE residual is substantially larger than the improvement in prediction error, suggesting that the physics objective primarily improves physical consistency while providing a more modest improvement in predictive accuracy.
+
+The explicit FD solver served as the numerical reference for trajectory generation. Under the current 32×32-grid benchmark, the FD implementation was faster per trajectory than neural inference (approximately 2.1–2.7 ms versus 20–21 ms). We therefore do not claim a computational speed advantage for the neural surrogate under this configuration; larger spatial domains, longer horizons, and batched/GPU inference are left for future evaluation.
+
+### Relative Improvement of PI-FNO over Data-Driven FNO
+| Metric | 100 | 500 | 1,000 |
+| --- | --- | --- | --- |
+| MSE | 7.9% | 4.5% | 6.2% |
+| Relative L2 | 1.6% | 1.5% | 1.8% |
+| PDE residual | 35.2% | 34.9% | 36.4% |
 
 ## Deployment
 Deployed on Hugging Face Spaces using a Docker SDK configured to bind to port 7860. Alternate local execution can be wrapped via Streamlit.
