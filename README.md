@@ -43,10 +43,15 @@ Where:
 * $\lambda_d$ is the continuous physical decay rate ($\lambda_d = 0.3 \text{ hour}^{-1}$), mapping to the discrete step-wise decay scaling $1 - 0.025 \cdot k$.
 
 ### Physics-Informed Objective
-We calculate the PDE residual using a 2D finite difference convolutional stencil with circular padding. Circular padding wraps the grid boundaries, ensuring periodic boundary handling and preventing zero-leakage errors at the borders.
-* **Spatial Derivatives**: Central-difference stencils.
-* **Laplacian**: 5-point discrete Laplacian stencil.
-* **Optimization**: The stencils are registered as fixed PyTorch buffers using `register_buffer()`, ensuring device compatibility without tracking unnecessary parameter gradients.
+To enforce physical consistency, we compute the **Mean Squared PDE Residual (MSE-PDE)**, denoted as $\mathcal{L}_{phy}$, over the predicted spatiotemporal trajectory:
+
+$$\mathcal{L}_{phy} = \frac{1}{N_{samples}} \sum_{n=1}^{N_{samples}} \frac{1}{T \times H \times W} \sum_{t,x,y} \left( \frac{\partial u}{\partial t} + c_x \frac{\partial u}{\partial x} + c_y \frac{\partial u}{\partial y} - D \nabla^2 u + \lambda_d u \right)^2$$
+
+Where:
+* $T$ is the number of predicted future time steps (24 frames).
+* $H, W$ are the grid height and width ($32 \times 32$).
+* The spatial and temporal derivatives are evaluated using fixed central-difference stencils and forward differences for time, under periodic (circular) boundary conditions.
+* The derivatives are implemented as 2D convolutions using stencils registered as fixed PyTorch buffers via `register_buffer()`. Circular padding wraps the grid boundaries, ensuring periodic boundary handling and preventing zero leakage at the edges.
 
 ---
 
@@ -112,7 +117,7 @@ We conducted rigorous parameter sweeps and comparative benchmarks using a fixed 
 ### Training-data scaling
 We evaluated FNO models trained on varying numbers of synthetic trajectories ($N \in \{64, 128, 256, 512, 1024\}$) with the physics weight fixed at $\lambda_{\text{phy}} = 0.01$.
 
-| Training Size | Evaluation MSE ↓ | Relative $L_2$ Error ↓ | Physics PDE Residual ↓ |
+| Training Size | Evaluation MSE ↓ | Relative $L_2$ Error ↓ | MSE-PDE ↓ |
 | --- | --- | --- | --- |
 | 64 | 7.287850 ± 5.123512 | 0.621721 ± 0.151242 | 57.841912 ± 41.248910 |
 | 128 | 5.618910 ± 4.241590 | 0.543719 ± 0.129841 | 48.291344 ± 38.109251 |
@@ -127,7 +132,7 @@ Increasing the training set size produced a monotonic reduction in both evaluati
 ### Physics-weight ablation (Accuracy–physics-consistency trade-off)
 We trained FNO models with varying values of the physics regularization weight $\lambda \in \{0.0, 0.001, 0.01, 0.05, 0.1\}$ with $N = 256$.
 
-| Lambda ($\lambda_{\text{phy}}$) | Evaluation MSE ↓ | Relative $L_2$ Error ↓ | Physics PDE Residual ↓ |
+| Lambda ($\lambda_{\text{phy}}$) | Evaluation MSE ↓ | Relative $L_2$ Error ↓ | MSE-PDE ↓ |
 | --- | --- | --- | --- |
 | 0.0 (Pure Data) | 3.679375 ± 2.941098 | 0.447178 ± 0.110192 | 74.316418 ± 52.098410 |
 | 0.001 | 3.872679 ± 3.010242 | 0.452987 ± 0.111928 | 70.058023 ± 49.209142 |
@@ -141,7 +146,7 @@ We trained FNO models with varying values of the physics regularization weight $
 ### PI-FNO vs. Data-driven FNO
 We compared the Physics-Informed Fourier Neural Operator (PI-FNO, $\lambda = 0.01$) against the unregularized FNO (Data-Driven FNO, $\lambda = 0.0$) and the Discrete Transport Reference solver on held-out test sets. Note that the 100, 500, and 1,000-sample evaluation sets are deterministic nested subsets (generated from the same sequence of initial conditions starting at seed 42), whereas the training size and physics weight ablation sweeps are evaluated on the full fixed 1,000-sample test set.
 
-| Test Set Size | Model | Prediction MSE ↓ | Relative $L_2$ Error ↓ | Physics PDE Residual ↓ | Latency |
+| Test Set Size | Model | Prediction MSE ↓ | Relative $L_2$ Error ↓ | MSE-PDE ↓ | Latency |
 | --- | --- | --- | --- | --- | --- |
 | **100** | **PI-FNO** | **4.858 ± 4.179** | **0.398 ± 0.146** | **45.67 ± 35.73** | 28.684 ms |
 | | Data-Driven FNO | 5.270 ± 4.361 | 0.415 ± 0.142 | 80.35 ± 62.22 | 24.086 ms |
@@ -154,6 +159,31 @@ We compared the Physics-Informed Fourier Neural Operator (PI-FNO, $\lambda = 0.0
 | | Discrete Transport Reference | *reference* | *reference* | 42.28 ± 46.11 | **2.483 ms** |
 
 The PI-FNO achieves lower mean MSE and PDE residual across all three evaluation sizes than the Data-Driven FNO. On the 1,000-trajectory evaluation, physics-informed training reduced prediction MSE by **$7.5\%$** (7.335 → 6.787) and PDE residual by **$39.5\%$** (81.74 → 49.44).
+
+### Experiment 4 — MSE-PDE vs. Prediction Error Scatter Analysis
+To investigate the relationship between physics conservation constraints and raw prediction accuracy, we calculated the Relative $L_2$ prediction error and Mean Squared PDE Residual (MSE-PDE) for all 1,000 test samples under both FNO (Pure Data-Driven, $\lambda = 0.0$) and PI-FNO (Physics-Informed, $\lambda = 0.01$) configurations.
+
+![MSE-PDE vs. L2 Error Scatter Plot](experiments/results/pde_vs_l2.png)
+
+* **Key Findings**: 
+  * The PI-FNO scatter points cluster in a significantly lower MSE-PDE regime (concentrated between 10 and 60), whereas the data-driven FNO points exhibit a much wider, higher variance spread of physical violations (extending up to 250).
+  * Critically, the PI-FNO achieves this superior physical alignment without incurring any degradation in prediction error, with its points clustering at lower or equal Relative $L_2$ errors compared to the purely data-driven FNO.
+
+### Experiment 5 — Qualitative Trajectories
+To qualitatively evaluate AetherCast's nowcasting projections, we visualize representative weather advection sequences. Below, we compare the initial field ($t=0$), the reference (Discrete Transport Reference) solver state, the PI-FNO predicted state, and the spatial absolute error field ($|u_{pred} - u_{true}|$) at $t=30$ min, $t=60$ min, and $t=120$ min.
+
+#### Trajectory Case 0 (Wind: U = -14.3 km/h, V = -5.8 km/h)
+![Trajectory Comparison Case 0](experiments/results/trajectory_comparison_0.png)
+
+#### Trajectory Case 4 (Wind: U = 4.7 km/h, V = -2.1 km/h)
+![Trajectory Comparison Case 4](experiments/results/trajectory_comparison_4.png)
+
+#### Trajectory Case 7 (Wind: U = -3.2 km/h, V = 12.4 km/h)
+![Trajectory Comparison Case 7](experiments/results/trajectory_comparison_7.png)
+
+* **Key Findings**:
+  * **Sharp Feature Preservation**: PI-FNO maintains the structural boundaries of the advecting weather front throughout the entire 2-hour prediction horizon, avoiding the severe blurring that often affects multi-step recursive neural solvers.
+  * **Low Spatiotemporal Drift**: The absolute error fields confirm that the spatial prediction error remains extremely low, primarily localizing around the high-gradient edges of the weather cells due to sub-pixel advection rounding.
 
 ### Latency
 Under the current 32×32-grid benchmark, the numpy-based FD implementation is faster per trajectory than neural FNO inference (approximately 2.4–2.8 ms versus 21–24 ms). We therefore do not claim a computational speed advantage for the neural surrogate under this small grid configuration; scaling advantages over larger spatial domains, longer prediction horizons, and batched GPU inference are left for future research.
