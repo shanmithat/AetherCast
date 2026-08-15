@@ -1,3 +1,12 @@
+---
+title: AetherCast
+emoji: 🌧
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # AetherCast
 
 Lightweight Physics-Informed Fourier Neural Operator for 2D Advection–Diffusion–Decay Simulation and Weather-Data-Driven Local Field Visualization.
