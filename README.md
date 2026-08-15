@@ -1,216 +1,629 @@
 # AetherCast
 
-Lightweight Physics-Informed Fourier Neural Operator for 2D Transport Simulation and Weather-Data-Driven Local Field Visualization.
+Lightweight Physics-Informed Fourier Neural Operator for 2D Advection–Diffusion–Decay Simulation and Weather-Data-Driven Local Field Visualization.
 
 ---
 
 ## Overview
-AetherCast is a proof-of-concept spatiotemporal surrogate modeling pipeline designed to simulate 2D advection-diffusion transport. It demonstrates how deep learning architectures can act as fast surrogates to emulate physical transport processes. The system features a live demonstration that queries real-time atmospheric measurements from the Weather Union API and maps them onto a continuous grid using local spatial interpolation, showing the neural surrogate's predictions in real time.
+
+AetherCast is a research prototype that investigates a **Physics-Informed Fourier Neural Operator (PI-FNO)** as a surrogate for two-dimensional advection–diffusion–decay transport.
+
+The core model learns a mapping from an initial spatial field and spatially uniform transport velocities to a **24-step future trajectory** on a (32\times32) grid. Physics-informed training augments the prediction loss with a continuous PDE residual based on finite-difference spatial derivatives.
+
+The repository contains:
+
+* a reproducible synthetic trajectory generator,
+* a compact 2D Fourier Neural Operator,
+* a physics-informed PDE residual,
+* a data-only FNO baseline,
+* an explicit discrete transport reference,
+* controlled training-size and physics-weight ablations,
+* quantitative and qualitative evaluation artifacts,
+* and a live visualization pipeline using localized Weather Union observations.
+
+A pretrained model checkpoint is included for deployment.
 
 ---
 
 ## What AetherCast Is
-* **A Scientific Prototype**: A demonstration of Fourier Neural Operators (FNO) trained as physics-regularized surrogates to solve advection-diffusion-decay equations.
-* **A Local Visualization Tool**: An interactive dashboard showing how weather observations from a single localized point can be spatially mapped and projected forward in time.
+
+### A scientific prototype
+
+AetherCast studies whether incorporating a transport-equation residual during FNO training can improve the **physical consistency of learned trajectories** while retaining competitive prediction accuracy.
+
+### A neural-operator surrogate
+
+The PI-FNO predicts the complete 24-step trajectory in a **single forward pass**, rather than recursively advancing the neural model one time step at a time.
+
+### A weather-data-driven visualization pipeline
+
+The live demonstration obtains a localized Weather Union observation, constructs a spatially varying initial field using explicitly disclosed virtual support points and inverse-distance weighting (IDW), and passes the resulting field through the pretrained neural operator.
+
+---
 
 ## What AetherCast Is Not
-* **An Operational Weather Forecast**: AetherCast is not a validated meteorological forecasting tool and is not calibrated against radar ground truth.
-* **A Multi-Station Field Measurement**: The spatial variation in the nowcast is synthetically generated via fixed perturbations to represent spatial interpolation visually; it does not represent independent observations across multiple physical weather stations.
+
+AetherCast is **not** an operational meteorological forecasting system.
+
+In particular:
+
+* It has not been calibrated or validated against radar-derived precipitation fields.
+* The live demonstration is not a multi-station meteorological analysis.
+* Virtual interpolation points are synthetic support points, not independent physical weather observations.
+* FNO outputs are reported in **illustrative model units**, not calibrated precipitation-rate units.
+* The synthetic benchmark evaluates transport-learning behavior rather than real-world weather forecast skill.
+
+These limitations are intentional and are part of the research prototype design.
 
 ---
 
-## System Architecture
-The pipeline consists of:
-1. **Data Ingestion**: Queries a localized Weather Union observation for a target coordinate.
-2. **Virtual Spatial Expansion**: Synthesizes support coordinates to establish spatial variation.
-3. **Local Distance Interpolation**: Computes Inverse Distance Weighting (IDW) to build a continuous $32 \times 32$ grid.
-4. **Neural Operator Core**: An FNO-2D surrogate model that projects the spatial state 2 hours into the future in a single forward pass.
-5. **Interactive Dashboard**: A Flask-based dashboard presenting predictions, classical references, and diagnostics.
+# System Architecture
+
+The complete pipeline consists of five stages:
+
+1. **Localized weather observation**
+   A Weather Union observation is obtained for the requested geographic coordinate.
+
+2. **Synthetic spatial support**
+   Four virtual neighboring support points are generated from the localized observation using fixed perturbation factors. These points are explicitly synthetic and are used only to create a spatially varying initial field.
+
+3. **IDW field construction**
+   Inverse Distance Weighting converts the support values into a (32\times32) spatial field using local kilometer coordinates.
+
+4. **Physics-informed neural operator**
+   A pretrained 2D FNO maps the initial field and wind components to a 24-frame future trajectory.
+
+5. **Reference and visualization**
+   The system also computes an explicit discrete transport reference and exposes prediction, reference, residual, and timing information through the dashboard.
 
 ---
 
-## Mathematical Formulation
+# Mathematical Formulation
 
-### Transport PDE
-Precipitation transport is modeled by the continuous 2D Advection-Diffusion partial differential equation (PDE) with decay:
+## Continuous transport equation
 
-$$\frac{\partial u}{\partial t} + c_x \frac{\partial u}{\partial x} + c_y \frac{\partial u}{\partial y} - D \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right) + \lambda_d u = 0$$
+The benchmark is based on the two-dimensional advection–diffusion–decay equation
 
-Where:
-* $u(t, x, y)$ is the precipitation/transport scalar field.
-* $c_x, c_y$ are the spatially uniform wind velocity components (km/h) obtained from the local weather readings.
-* $D$ is the physical diffusion coefficient (dispersion rate).
-* $\lambda_d$ is the continuous physical decay rate ($\lambda_d = 0.3 \text{ hour}^{-1}$), mapping to the discrete step-wise decay scaling $1 - 0.025 \cdot k$.
+[
+\frac{\partial u}{\partial t}
++
+c_x\frac{\partial u}{\partial x}
++
+c_y\frac{\partial u}{\partial y}
+-
+D
+\left(
+\frac{\partial^2u}{\partial x^2}
++
+\frac{\partial^2u}{\partial y^2}
+\right)
++
+\lambda_d u
+=
+0.
+]
 
-### Physics-Informed Objective
-To enforce physical consistency, we compute the **Mean Squared PDE Residual (MSE-PDE)**, denoted as $\mathcal{L}_{phy}$, over the predicted spatiotemporal trajectory:
+Here:
 
-$$\mathcal{L}_{phy} = \frac{1}{N_{samples}} \sum_{n=1}^{N_{samples}} \frac{1}{T \times H \times W} \sum_{t,x,y} \left( \frac{\partial u}{\partial t} + c_x \frac{\partial u}{\partial x} + c_y \frac{\partial u}{\partial y} - D \nabla^2 u + \lambda_d u \right)^2$$
+* (u(t,x,y)) is the transported scalar field,
+* (c_x,c_y) are spatially uniform transport velocities,
+* (D) is the diffusion coefficient,
+* (\lambda_d) is the continuous decay rate.
 
-Where:
-* $T$ is the number of predicted future time steps (24 frames).
-* $H, W$ are the grid height and width ($32 \times 32$).
-* The spatial and temporal derivatives are evaluated using fixed central-difference stencils and forward differences for time, under periodic (circular) boundary conditions.
-* The derivatives are implemented as 2D convolutions using stencils registered as fixed PyTorch buffers via `register_buffer()`. Circular padding wraps the grid boundaries, ensuring periodic boundary handling and preventing zero leakage at the edges.
+The benchmark uses:
+
+* spatial resolution: (32\times32),
+* domain size: (30\times30) km,
+* grid spacing: approximately (0.9375) km,
+* temporal step: 5 minutes,
+* prediction horizon: 24 steps / 120 minutes,
+* diffusion coefficient: derived from the discrete diffusion factor,
+* decay rate: (0.3\ \mathrm{h}^{-1}).
 
 ---
 
-## FNO Architecture
+## Physics-informed objective
 
-### Inputs
-The model receives three physical input channels (rainfall intensity, wind U component, wind V component) and appends two normalized spatial coordinate grids ($x, y \in [0, 1]$), giving five channels in total at the lifting layer.
+The training objective is
 
-### Spectral layers
-The model features two sequential Fourier layers. Complex spectral multiplication is implemented explicitly using real and imaginary components:
+[
+\mathcal{L}
+=
+\mathcal{L}_{data}
++
+\lambda_{phy}\mathcal{L}_{phy},
+]
 
-$$(a+ib)(c+id) = (ac-bd) + i(bc+ad)$$
+where
+
+[
+\mathcal{L}_{data}
+=
+\mathrm{MSE}(u_{pred},u_{target})
+]
+
+and the physics term is the mean squared PDE residual:
+
+[
+\mathcal{L}_{phy}
+=
+\frac{1}{N}
+\sum_n
+\frac{1}{THW}
+\sum_{t,x,y}
+\left(
+\frac{\partial u}{\partial t}
++
+c_x\frac{\partial u}{\partial x}
++
+c_y\frac{\partial u}{\partial y}
+-
+D\nabla^2u
++
+\lambda_du
+\right)^2.
+]
+
+Spatial derivatives use fixed central-difference stencils and a five-point Laplacian. Temporal derivatives use forward differences between consecutive predicted frames.
+
+The spatial stencils are implemented as fixed PyTorch buffers and evaluated using circular padding, consistent with the periodic boundaries used by the synthetic transport generator.
+
+---
+
+# FNO Architecture
+
+The model receives three physical channels:
+
+1. initial scalar field,
+2. (u)-direction transport velocity,
+3. (v)-direction transport velocity.
+
+Two normalized spatial coordinate channels are appended internally, giving five channels at the lifting layer.
+
+The network contains:
+
+* width: 20,
+* Fourier modes: 8 in each spatial direction,
+* two spectral convolution blocks,
+* pointwise skip connections,
+* nonlinear projection layers,
+* 24 output channels corresponding to the 24 future time steps.
 
 ### Parameter count
-* **Total Trainable Parameters**: 106,264 parameters.
-* **Hyperparameters**: Width $W = 20$, modes $k_{max} = 8$ in both spatial directions.
+
+**106,264 trainable parameters**
+
+The compact architecture is intended as a controlled research prototype rather than a large-scale forecasting model.
 
 ---
 
-## Synthetic Data
+# Synthetic Benchmark
 
-### Initial fields
-Precipitation fields are initialized by superimposing 1 to 3 random Gaussian profiles on a $32 \times 32$ spatial grid.
+## Initial conditions
 
-### Wind
-Spatially uniform wind velocity vectors $c_x, c_y$ are randomly sampled from a uniform distribution in the range $[-16, 16]$ km/h.
+Each synthetic trajectory begins with a (32\times32) field formed by superimposing 1–3 Gaussian precipitation-like spatial profiles.
 
-### Transport dynamics
-Trajectories are simulated step-by-step using circular shifts (`np.roll`) to model periodic boundaries, coupled with discrete Laplacian blurs and a linear step decay rate of `DECAY_PER_STEP = 0.025`.
+Gaussian centers, widths, and intensities are randomly sampled.
 
-### Prediction horizon
-* **Temporal Horizon**: 24 steps representing 120 minutes (2 hours nowcast) at 5-minute intervals.
+## Transport velocities
+
+The spatially uniform transport velocities are independently sampled from
+
+[
+[-16,16]\ \mathrm{km/h}.
+]
+
+## Trajectory generation
+
+The target trajectory is generated recursively for 24 steps.
+
+Each step applies:
+
+1. circular advection,
+2. a constant discrete diffusion operation,
+3. exponential physical decay.
+
+The decay factor is derived from the continuous decay rate:
+
+[
+u_{k+1}
+=
+\mathrm{diffuse}
+\left(
+\mathrm{shift}(u_k)
+\right)
+e^{-\lambda_d\Delta t}.
+]
+
+This produces a deterministic discrete approximation of the intended transport dynamics.
 
 ---
 
-## Live Weather Demonstration
+# Numerical Reference
 
-### Weather Union observation
-The live dashboard queries a localized Weather Union coordinate to fetch temperature, humidity, wind speed, wind direction, and rainfall intensity.
+A separate **Discrete Transport Reference** implementation advances the initial field using the same explicitly defined transport dynamics:
 
-### Virtual interpolation points
-Because Weather Union queries represent a single localized point, the pipeline synthesizes four virtual neighboring points with fixed spatial perturbations (North $\times 0.7$, South $\times 1.2$, East $\times 0.8$, West $\times 1.1$). These points act as spatial interpolation support nodes and do not represent independent weather observations.
+* circular spatial advection,
+* constant discrete diffusion,
+* exponential decay.
 
-### IDW
-Inverse Distance Weighting (IDW) interpolation is computed using local kilometer displacement coordinates:
-$$x = \Delta\text{lon} \times 111.0 \times \cos(\text{lat}), \quad y = \Delta\text{lat} \times 111.0$$
-This ensures the spatial interpolation is physically consistent with the $30 \times 30$ km box domain.
+It is used as a numerical reference for qualitative trajectory comparisons and PDE-residual measurements.
 
-### Model projection
-Projections are output in **illustrative model units**. The dashboard displays the single-trajectory forward latency.
+It is intentionally described as a **discrete transport reference**, rather than as an independent high-fidelity meteorological solver.
 
 ---
 
-## Numerical Reference
-We implement an **explicit discrete transport reference solver** to solve the advection-diffusion-decay equations numerically using step-by-step circular shifts, discrete diffusion steps, and step-wise linear decay.
+# Experimental Evaluation
+
+All benchmark experiments use deterministic random seeds (`SEED = 42`) for reproducibility.
+
+Metrics are reported as mean ± standard deviation across evaluation trajectories.
+
+The repository contains five complementary evaluations:
+
+1. training-data scaling,
+2. physics-weight ablation,
+3. PI-FNO vs. data-driven FNO comparison,
+4. per-sample PDE-residual vs. prediction-error analysis,
+5. qualitative trajectory visualization.
 
 ---
 
-## Experiments
+## 1. Training-data scaling
 
-We conducted rigorous parameter sweeps and comparative benchmarks using a fixed seed `SEED = 42` for data generation and test-set reproducibility. All models were evaluated on the same fixed 1,000-sample test set. We report metrics as **mean ± standard deviation** across the test trajectories.
+FNO models are trained using
 
-### Training-data scaling
-We evaluated FNO models trained on varying numbers of synthetic trajectories ($N \in \{64, 128, 256, 512, 1024\}$) with the physics weight fixed at $\lambda_{\text{phy}} = 0.01$.
+[
+N\in{64,128,256,512,1024}
+]
 
-| Training Size | Evaluation MSE ↓ | Relative $L_2$ Error ↓ | MSE-PDE ↓ |
-| --- | --- | --- | --- |
-| 64 | 7.287850 ± 5.123512 | 0.621721 ± 0.151242 | 57.841912 ± 41.248910 |
-| 128 | 5.618910 ± 4.241590 | 0.543719 ± 0.129841 | 48.291344 ± 38.109251 |
-| 256 | 3.869511 ± 3.012489 | 0.449641 ± 0.110252 | 47.639341 ± 35.241092 |
-| 512 | 2.637725 ± 2.109841 | 0.381342 ± 0.098421 | 47.420520 ± 33.098412 |
-| 1024 | 1.504410 ± 1.241920 | 0.297529 ± 0.080194 | 43.954590 ± 29.987410 |
+synthetic trajectories with the physics weight fixed at
 
-Increasing the training set size produced a monotonic reduction in both evaluation MSE and Relative $L_2$ error:
-* **MSE**: Reductions of **$79.4\%$** (7.288 → 1.504).
-* **Relative $L_2$**: Reductions of **$52.1\%$** (0.622 → 0.298).
+[
+\lambda_{phy}=0.01.
+]
 
-### Physics-weight ablation (Accuracy–physics-consistency trade-off)
-We trained FNO models with varying values of the physics regularization weight $\lambda \in \{0.0, 0.001, 0.01, 0.05, 0.1\}$ with $N = 256$.
+| Training Size |    Evaluation MSE ↓ | Relative (L_2) Error ↓ |             MSE-PDE ↓ |
+| ------------: | ------------------: | ---------------------: | --------------------: |
+|            64 | 7.287850 ± 5.123512 |    0.621721 ± 0.151242 | 57.841912 ± 41.248910 |
+|           128 | 5.618910 ± 4.241590 |    0.543719 ± 0.129841 | 48.291344 ± 38.109251 |
+|           256 | 3.869511 ± 3.012489 |    0.449641 ± 0.110252 | 47.639341 ± 35.241092 |
+|           512 | 2.637725 ± 2.109841 |    0.381342 ± 0.098421 | 47.420520 ± 33.098412 |
+|          1024 | 1.504410 ± 1.241920 |    0.297529 ± 0.080194 | 43.954590 ± 29.987410 |
 
-| Lambda ($\lambda_{\text{phy}}$) | Evaluation MSE ↓ | Relative $L_2$ Error ↓ | MSE-PDE ↓ |
-| --- | --- | --- | --- |
-| 0.0 (Pure Data) | 3.679375 ± 2.941098 | 0.447178 ± 0.110192 | 74.316418 ± 52.098410 |
-| 0.001 | 3.872679 ± 3.010242 | 0.452987 ± 0.111928 | 70.058023 ± 49.209142 |
-| 0.01 | 3.777306 ± 2.981094 | 0.446050 ± 0.109841 | 47.474849 ± 35.109841 |
-| 0.05 | 3.952990 ± 3.109842 | 0.475213 ± 0.118942 | 24.748852 ± 19.209841 |
-| 0.1 | 4.359474 ± 3.489109 | 0.497618 ± 0.124109 | 17.073333 ± 12.984102 |
+Increasing the training set size produces a monotonic reduction in both prediction MSE and Relative (L_2) error.
 
-* **Trade-off Analysis**: Increasing $\lambda$ produces a substantial reduction in the measured mean-squared PDE residual, dropping from $74.316$ to $17.073$ (a **$77.0\%$ reduction**), while slightly raising the prediction MSE.
-* **Compromise Point**: Setting $\lambda = 0.01$ provides a favorable trade-off between prediction accuracy and physics residual. Relative to the unconstrained FNO ($\lambda = 0.0$), $\lambda = 0.01$ reduces the PDE residual by **$36.1\%$** while increasing MSE by only **$2.7\%$** and achieving the lowest Relative $L_2$ error.
+From 64 to 1024 training trajectories:
 
-### PI-FNO vs. Data-driven FNO
-We compared the Physics-Informed Fourier Neural Operator (PI-FNO, $\lambda = 0.01$) against the unregularized FNO (Data-Driven FNO, $\lambda = 0.0$) and the Discrete Transport Reference solver on held-out test sets. Note that the 100, 500, and 1,000-sample evaluation sets are deterministic nested subsets (generated from the same sequence of initial conditions starting at seed 42), whereas the training size and physics weight ablation sweeps are evaluated on the full fixed 1,000-sample test set.
+* MSE decreases by approximately **79.4%**.
+* Relative (L_2) error decreases by approximately **52.1%**.
 
-| Test Set Size | Model | Prediction MSE ↓ | Relative $L_2$ Error ↓ | MSE-PDE ↓ | Latency |
-| --- | --- | --- | --- | --- | --- |
-| **100** | **PI-FNO** | **4.858 ± 4.179** | **0.398 ± 0.146** | **45.67 ± 35.73** | 28.684 ms |
-| | Data-Driven FNO | 5.270 ± 4.361 | 0.415 ± 0.142 | 80.35 ± 62.22 | 24.086 ms |
-| | Discrete Transport Reference | *reference* | *reference* | 51.13 ± 64.05 | **2.405 ms** |
-| **500** | **PI-FNO** | **6.086 ± 6.506** | **0.439 ± 0.167** | **46.70 ± 39.18** | 22.387 ms |
-| | Data-Driven FNO | 6.545 ± 6.765 | 0.455 ± 0.162 | 77.61 ± 61.06 | 23.458 ms |
-| | Discrete Transport Reference | *reference* | *reference* | 40.34 ± 43.22 | **2.662 ms** |
-| **1000**| **PI-FNO** | **6.787 ± 8.630** | **0.446 ± 0.166** | **49.44 ± 44.93** | 24.637 ms |
-| | Data-Driven FNO | 7.335 ± 9.269 | 0.464 ± 0.160 | 81.74 ± 70.26 | 23.855 ms |
-| | Discrete Transport Reference | *reference* | *reference* | 42.28 ± 46.11 | **2.483 ms** |
+---
 
-The PI-FNO achieves lower mean MSE and PDE residual across all three evaluation sizes than the Data-Driven FNO. On the 1,000-trajectory evaluation, physics-informed training reduced prediction MSE by **$7.5\%$** (7.335 → 6.787) and PDE residual by **$39.5\%$** (81.74 → 49.44).
+## 2. Physics-weight ablation
 
-### Experiment 4 — MSE-PDE vs. Prediction Error Scatter Analysis
-To investigate the relationship between physics conservation constraints and raw prediction accuracy, we calculated the Relative $L_2$ prediction error and Mean Squared PDE Residual (MSE-PDE) for all 1,000 test samples under both FNO (Pure Data-Driven, $\lambda = 0.0$) and PI-FNO (Physics-Informed, $\lambda = 0.01$) configurations.
+The physics regularization weight is varied over
+
+[
+\lambda_{phy}
+\in
+{0,0.001,0.01,0.05,0.1}
+]
+
+with the training set fixed at 256 trajectories.
+
+| (\lambda_{phy}) |    Evaluation MSE ↓ | Relative (L_2) Error ↓ |             MSE-PDE ↓ |
+| --------------: | ------------------: | ---------------------: | --------------------: |
+|             0.0 | 3.679375 ± 2.941098 |    0.447178 ± 0.110192 | 74.316418 ± 52.098410 |
+|           0.001 | 3.872679 ± 3.010242 |    0.452987 ± 0.111928 | 70.058023 ± 49.209142 |
+|            0.01 | 3.777306 ± 2.981094 |    0.446050 ± 0.109841 | 47.474849 ± 35.109841 |
+|            0.05 | 3.952990 ± 3.109842 |    0.475213 ± 0.118942 | 24.748852 ± 19.209841 |
+|             0.1 | 4.359474 ± 3.489109 |    0.497618 ± 0.124109 | 17.073333 ± 12.984102 |
+
+Increasing the physics weight substantially reduces the measured PDE residual.
+
+At (\lambda_{phy}=0.1), the mean PDE residual decreases by approximately **77%** relative to the unregularized FNO.
+
+The (\lambda_{phy}=0.01) configuration provides a useful compromise: relative to the pure data-driven model, it reduces the mean PDE residual by approximately **36.1%** while increasing MSE by approximately **2.7%** and producing the lowest Relative (L_2) error among the tested settings.
+
+---
+
+## 3. PI-FNO vs. Data-Driven FNO
+
+The final PI-FNO configuration uses
+
+[
+\lambda_{phy}=0.01.
+]
+
+It is compared against:
+
+* an unregularized data-driven FNO,
+* the Discrete Transport Reference.
+
+The 100-, 500-, and 1,000-trajectory evaluation sets are deterministic nested subsets generated from the same seed-42 sequence.
+
+| Evaluation Size | Model                        |  Prediction MSE ↓ |  Relative (L_2) ↓ |         MSE-PDE ↓ |      Latency |
+| --------------: | ---------------------------- | ----------------: | ----------------: | ----------------: | -----------: |
+|             100 | **PI-FNO**                   | **4.858 ± 4.179** | **0.398 ± 0.146** | **45.67 ± 35.73** |    28.684 ms |
+|                 | Data-Driven FNO              |     5.270 ± 4.361 |     0.415 ± 0.142 |     80.35 ± 62.22 |    24.086 ms |
+|                 | Discrete Transport Reference |         reference |         reference |     51.13 ± 64.05 | **2.405 ms** |
+|             500 | **PI-FNO**                   | **6.086 ± 6.506** | **0.439 ± 0.167** | **46.70 ± 39.18** |    22.387 ms |
+|                 | Data-Driven FNO              |     6.545 ± 6.765 |     0.455 ± 0.162 |     77.61 ± 61.06 |    23.458 ms |
+|                 | Discrete Transport Reference |         reference |         reference |     40.34 ± 43.22 | **2.662 ms** |
+|            1000 | **PI-FNO**                   | **6.787 ± 8.630** | **0.446 ± 0.166** | **49.44 ± 44.93** |    24.637 ms |
+|                 | Data-Driven FNO              |     7.335 ± 9.269 |     0.464 ± 0.160 |     81.74 ± 70.26 |    23.855 ms |
+|                 | Discrete Transport Reference |         reference |         reference |     42.28 ± 46.11 | **2.483 ms** |
+
+Across all three evaluation sizes, PI-FNO obtains lower **mean prediction MSE, Relative (L_2) error, and PDE residual** than the data-driven FNO.
+
+On the 1,000-trajectory evaluation:
+
+* prediction MSE decreases by approximately **7.5%**,
+* PDE residual decreases by approximately **39.5%**.
+
+The experiment supports the interpretation that the physics residual acts as a regularizer that improves physical consistency while preserving competitive prediction accuracy.
+
+---
+
+## 4. PDE Residual vs. Prediction Error
+
+The repository contains a per-sample comparison of Relative (L_2) prediction error and PDE residual for all 1,000 evaluation trajectories under both FNO configurations.
 
 ![MSE-PDE vs. L2 Error Scatter Plot](experiments/results/pde_vs_l2.png)
 
-* **Key Findings**: 
-  * The PI-FNO scatter points cluster in a significantly lower MSE-PDE regime (concentrated between 10 and 60), whereas the data-driven FNO points exhibit a much wider, higher variance spread of physical violations (extending up to 250).
-  * Critically, the PI-FNO achieves this superior physical alignment without incurring any degradation in prediction error, with its points clustering at lower or equal Relative $L_2$ errors compared to the purely data-driven FNO.
+The PI-FNO distribution is concentrated in a lower PDE-residual regime than the data-driven FNO, while maintaining comparable prediction error.
 
-### Experiment 5 — Qualitative Trajectories
-To qualitatively evaluate AetherCast's nowcasting projections, we visualize representative weather advection sequences. Below, we compare the initial field ($t=0$), the reference (Discrete Transport Reference) solver state, the PI-FNO predicted state, and the spatial absolute error field ($|u_{pred} - u_{true}|$) at $t=30$ min, $t=60$ min, and $t=120$ min.
+This analysis complements the aggregate benchmark by showing the sample-level relationship between prediction accuracy and physical consistency.
 
-#### Trajectory Case 0 (Wind: U = -14.3 km/h, V = -5.8 km/h)
+---
+
+## 5. Qualitative Trajectories
+
+Representative trajectories are provided at 30-, 60-, and 120-minute horizons.
+
+Each visualization compares:
+
+* initial field,
+* Discrete Transport Reference,
+* PI-FNO prediction,
+* absolute spatial prediction error.
+
+### Trajectory Case 0
+
+Wind:
+
+[
+U=-14.3\ \mathrm{km/h},
+\qquad
+V=-5.8\ \mathrm{km/h}
+]
+
 ![Trajectory Comparison Case 0](experiments/results/trajectory_comparison_0.png)
 
-#### Trajectory Case 4 (Wind: U = 4.7 km/h, V = -2.1 km/h)
+### Trajectory Case 4
+
+Wind:
+
+[
+U=4.7\ \mathrm{km/h},
+\qquad
+V=-2.1\ \mathrm{km/h}
+]
+
 ![Trajectory Comparison Case 4](experiments/results/trajectory_comparison_4.png)
 
-#### Trajectory Case 7 (Wind: U = -3.2 km/h, V = 12.4 km/h)
+### Trajectory Case 7
+
+Wind:
+
+[
+U=-3.2\ \mathrm{km/h},
+\qquad
+V=12.4\ \mathrm{km/h}
+]
+
 ![Trajectory Comparison Case 7](experiments/results/trajectory_comparison_7.png)
 
-* **Key Findings**:
-  * **Sharp Feature Preservation**: PI-FNO maintains the structural boundaries of the advecting weather front throughout the entire 2-hour prediction horizon, avoiding the severe blurring that often affects multi-step recursive neural solvers.
-  * **Low Spatiotemporal Drift**: The absolute error fields confirm that the spatial prediction error remains extremely low, primarily localizing around the high-gradient edges of the weather cells due to sub-pixel advection rounding.
-
-### Latency
-Under the current 32×32-grid benchmark, the numpy-based FD implementation is faster per trajectory than neural FNO inference (approximately 2.4–2.8 ms versus 21–24 ms). We therefore do not claim a computational speed advantage for the neural surrogate under this small grid configuration; scaling advantages over larger spatial domains, longer prediction horizons, and batched GPU inference are left for future research.
+The qualitative examples show that the PI-FNO reproduces the dominant transport structure over the two-hour horizon, with errors concentrated around moving high-gradient regions.
 
 ---
 
-## Deployment
-Deployed on Hugging Face Spaces using a Docker SDK configured to bind to port 7860.
+# Inference Latency
+
+Latency is measured per trajectory.
+
+Under the current (32\times32) CPU benchmark, the discrete transport reference is faster than neural inference:
+
+* Discrete reference: approximately **2.4–2.8 ms**
+* FNO inference: approximately **22–29 ms**
+
+Therefore, AetherCast **does not claim a computational speed advantage at this small grid size**.
+
+Potential scaling advantages of neural operators for larger spatial domains, longer horizons, and batched GPU workloads are left as future work.
 
 ---
 
-## Reproducibility
-All reported benchmark tables can be reproduced using the scripts in the `experiments/` directory:
-* `experiments/run_training_sweep.py`: Re-evaluates training set size scaling.
-* `experiments/run_lambda_sweep.py`: Re-evaluates physics weight ablation.
-* `experiments/run_model_comparison.py`: Generates comparative benchmark statistics.
+# Live Weather Demonstration
+
+## Weather Union
+
+The live pipeline queries a localized Weather Union observation for:
+
+* temperature,
+* humidity,
+* wind speed,
+* wind direction,
+* rainfall intensity.
+
+## Virtual spatial support
+
+Because the live pipeline obtains a localized observation rather than a dense multi-station field, four synthetic neighboring support points are constructed using fixed perturbations:
+
+* North × 0.7
+* South × 1.2
+* East × 0.8
+* West × 1.1
+
+These points are **not independent weather observations**.
+
+They are used solely to create spatial support for the IDW visualization.
+
+## IDW interpolation
+
+The support observations are mapped to local kilometer coordinates and interpolated onto the (32\times32) grid using inverse-distance weighting.
+
+For a local coordinate displacement:
+
+[
+x =
+\Delta lon
+\times
+111
+\times
+\cos(lat),
+]
+
+[
+y =
+\Delta lat
+\times
+111.
+]
+
+## Neural projection
+
+The resulting field, together with the derived wind components, is passed through the pretrained PI-FNO.
+
+Neural projections are displayed in **illustrative model units** and should not be interpreted as calibrated rainfall-rate predictions.
 
 ---
 
-## Limitations
-* **Rigid Advection**: Assumes spatially uniform wind vectors over the local box domain.
-* **Coarse Resolution**: Limited to $32 \times 32$ spatial grids.
-* **Synthetic Interpolation**: The live spatial display relies on synthetic perturbations of a single Weather Union observation.
+# Repository Structure
+
+```text
+.
+├── aethercast/
+│   ├── config.py
+│   ├── data.py
+│   ├── physics.py
+│   ├── solvers.py
+│   ├── train.py
+│   ├── models/
+│   │   ├── fno2d.py
+│   │   └── layers.py
+│   └── utils/
+│       └── physics_loss.py
+│
+├── experiments/
+│   ├── run_training_sweep.py
+│   ├── run_lambda_sweep.py
+│   ├── run_model_comparison.py
+│   ├── run_residual_vs_error.py
+│   ├── run_qualitative_trajectories.py
+│   └── results/
+│
+├── app.py
+├── streamlit_app.py
+├── templates/
+│   └── index.html
+├── fno_weights.pt
+├── requirements.txt
+├── Dockerfile
+└── README.md
+```
 
 ---
 
-## Citation
+# Reproducibility
+
+All benchmark experiments use `SEED = 42`.
+
+The experiment scripts explicitly seed:
+
+* Python `random`,
+* NumPy,
+* PyTorch,
+* CUDA when available.
+
+The repository contains the generated CSV tables and qualitative figures used in the README.
+
+## Re-run experiments
+
+```bash
+python experiments/run_training_sweep.py
+python experiments/run_lambda_sweep.py
+python experiments/run_model_comparison.py
+python experiments/run_residual_vs_error.py
+python experiments/run_qualitative_trajectories.py
+```
+
+---
+
+# Deployment
+
+A pretrained checkpoint is included:
+
+```text
+fno_weights.pt
+```
+
+The deployment applications load the saved state dictionary directly rather than retraining the model at startup.
+
+The repository includes a Docker configuration for deployment to Hugging Face Spaces.
+
+---
+
+# Limitations
+
+The current prototype has several important limitations:
+
+1. **Synthetic benchmark dynamics**
+   Training and evaluation trajectories are generated from a controlled synthetic transport process rather than observational weather datasets.
+
+2. **Uniform transport velocity**
+   The benchmark assumes spatially uniform transport velocities over the entire (30\times30) km domain.
+
+3. **Periodic boundaries**
+   The synthetic benchmark uses circular spatial boundaries.
+
+4. **Coarse spatial resolution**
+   The model operates on a (32\times32) grid.
+
+5. **Synthetic live spatial expansion**
+   The live visualization constructs virtual spatial support from a single localized weather observation.
+
+6. **No radar validation**
+   The system has not been evaluated against radar-derived precipitation ground truth.
+
+7. **Model-unit output**
+   Neural predictions are not calibrated to physical rainfall-rate units.
+
+8. **Small-scale latency benchmark**
+   The current CPU benchmark does not demonstrate a neural inference speed advantage over the simple discrete reference.
+
+These limitations define the scope of the current research prototype and motivate future evaluation on observational weather datasets and larger operator-learning problems.
+
+---
+
+# Future Work
+
+Potential extensions include:
+
+* evaluation against radar-derived precipitation fields,
+* multi-station observational input,
+* spatially varying wind fields,
+* non-periodic boundary conditions,
+* larger spatial domains and resolutions,
+* longer prediction horizons,
+* uncertainty estimation,
+* GPU and batched inference benchmarks,
+* and comparison against stronger numerical and neural forecasting baselines.
+
+---
+
+# Citation
+
 ```bibtex
 @article{aethercast2026,
   title={AetherCast: Physics-Informed Fourier Neural Operator for 2D Transport Simulation},
