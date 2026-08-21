@@ -203,7 +203,7 @@ else:
         
         # Render Heatmap Canvas
         fig, ax = plt.subplots(figsize=(4.5, 4.5), facecolor='none')
-        ax.imshow(frame, cmap=cmap, norm=norm, origin='lower')
+        ax.imshow(frame, cmap=cmap, norm=norm, origin='lower', interpolation='bilinear')
         ax.axis('off')
         st.pyplot(fig, clear_figure=True)
         

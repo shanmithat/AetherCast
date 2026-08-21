@@ -827,34 +827,52 @@
             await checkCalibrationStatus();
         }
 
-        // Color mapper for rain fields
-        function getRainColor(val) {
+        // Continuous color mapper for rain fields returning [R, G, B, A]
+        function getRainColorRGB(val, isLight) {
             if (val <= 0.05) {
                 // Background color changes based on light/dark mode
-                return document.body.classList.contains('light-mode') ? "rgb(241, 245, 249)" : "rgb(15, 23, 42)";
+                return isLight ? [241, 245, 249, 255] : [15, 23, 42, 255];
             }
             
-            // Map values to discrete meteorological colors:
-            // 0 - 2 mm/h: Blue
-            // 2 - 10 mm/h: Cyan
-            // 10 - 25 mm/h: Green
-            // 25+ mm/h: Orange/Red
-            if (val < 2) {
-                const int = Math.floor((val / 2.0) * 80);
-                return `rgb(6, ${100 + int}, ${150 + int})`;
-            } else if (val < 10) {
-                const int = Math.floor(((val - 2.0) / 8.0) * 100);
-                return `rgb(6, ${180 + int * 0.5}, ${180 + int * 0.7})`;
-            } else if (val < 25) {
-                const int = Math.floor(((val - 10.0) / 15.0) * 120);
-                return `rgb(${28 + int * 0.5}, 200, ${6 + int * 0.1})`;
+            // Map values to continuous meteorological gradient:
+            // Light rain (< 2 mm/h): Soft Blue -> Cyan
+            // Moderate rain (2 - 10 mm/h): Cyan -> Green
+            // Heavy rain (10 - 25 mm/h): Green -> Yellow/Orange
+            // Extreme rain (>= 25 mm/h): Orange -> Magenta/Purple
+            if (val < 2.0) {
+                const ratio = (val - 0.05) / 1.95;
+                const r = Math.floor(6 + ratio * 0);
+                const g = Math.floor(100 + ratio * 100);
+                const b = Math.floor(220 - ratio * 20);
+                return [r, g, b, 255];
+            } else if (val < 10.0) {
+                const ratio = (val - 2.0) / 8.0;
+                const r = Math.floor(6 + ratio * 22);
+                const g = Math.floor(200 - ratio * 20);
+                const b = Math.floor(200 - ratio * 194);
+                return [r, g, b, 255];
+            } else if (val < 25.0) {
+                const ratio = (val - 10.0) / 15.0;
+                const r = Math.floor(28 + ratio * 192);
+                const g = Math.floor(180 - ratio * 112);
+                const b = Math.floor(6 + ratio * 1);
+                return [r, g, b, 255];
             } else {
-                const int = Math.min(100, Math.floor(((val - 25.0) / 20.0) * 150));
-                return `rgb(${200 + int}, ${180 - int * 1.2}, 6)`;
+                const ratio = Math.min(1.0, (val - 25.0) / 25.0);
+                const r = Math.floor(220 + ratio * 35);
+                const g = Math.floor(68 - ratio * 68);
+                const b = Math.floor(7 + ratio * 193);
+                return [r, g, b, 255];
             }
         }
 
-        // Draw grids on canvas
+        // Backward-compatible color mapper for analytics labels
+        function getRainColor(val) {
+            const rgb = getRainColorRGB(val, document.body.classList.contains('light-mode'));
+            return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        }
+
+        // Draw grids on canvas using bilinear offscreen interpolation
         function drawGrid(canvasId, gridData) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
@@ -862,21 +880,37 @@
             const w = canvas.width;
             const h = canvas.height;
             const size = 32;
-            const cellW = w / size;
-            const cellH = h / size;
 
-            ctx.clearRect(0, 0, w, h);
-            
+            // Create temporary 32x32 offscreen buffer
+            const offscreen = document.createElement('canvas');
+            offscreen.width = size;
+            offscreen.height = size;
+            const oCtx = offscreen.getContext('2d');
+            const imgData = oCtx.createImageData(size, size);
+
+            const isLight = document.body.classList.contains('light-mode');
+
             for (let r = 0; r < size; r++) {
                 for (let c = 0; c < size; c++) {
                     const val = gridData[r][c];
-                    ctx.fillStyle = getRainColor(val);
-                    ctx.fillRect(c * cellW, r * cellH, cellW + 0.3, cellH + 0.3);
+                    const rgb = getRainColorRGB(val, isLight);
+                    const idx = (r * size + c) * 4;
+                    imgData.data[idx] = rgb[0];
+                    imgData.data[idx + 1] = rgb[1];
+                    imgData.data[idx + 2] = rgb[2];
+                    imgData.data[idx + 3] = rgb[3];
                 }
             }
+            oCtx.putImageData(imgData, 0, 0);
+
+            // Scale to parent size with smoothing enabled
+            ctx.clearRect(0, 0, w, h);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(offscreen, 0, 0, w, h);
         }
 
-        // Draw model difference grids
+        // Draw model difference grids using bilinear offscreen interpolation
         function drawDiffGrid(canvasId, fnoGrid, advGrid) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
@@ -884,32 +918,49 @@
             const w = canvas.width;
             const h = canvas.height;
             const size = 32;
-            const cellW = w / size;
-            const cellH = h / size;
 
-            ctx.clearRect(0, 0, w, h);
-            
+            const offscreen = document.createElement('canvas');
+            offscreen.width = size;
+            offscreen.height = size;
+            const oCtx = offscreen.getContext('2d');
+            const imgData = oCtx.createImageData(size, size);
+
             const isLight = document.body.classList.contains('light-mode');
-            const identColor = isLight ? "rgb(241, 245, 249)" : "rgb(15, 23, 42)";
-            
+            const bg = isLight ? [241, 245, 249, 255] : [15, 23, 42, 255];
+
             for (let r = 0; r < size; r++) {
                 for (let c = 0; c < size; c++) {
                     const fVal = fnoGrid[r][c];
                     const aVal = advGrid[r][c];
                     const diff = fVal - aVal;
+                    const idx = (r * size + c) * 4;
                     
                     if (Math.abs(diff) < 0.1) {
-                        ctx.fillStyle = identColor;
+                        imgData.data[idx] = bg[0];
+                        imgData.data[idx + 1] = bg[1];
+                        imgData.data[idx + 2] = bg[2];
+                        imgData.data[idx + 3] = bg[3];
                     } else if (diff > 0) {
                         const opacity = Math.min(1.0, diff / 5.0);
-                        ctx.fillStyle = `rgba(239, 68, 68, ${0.15 + opacity * 0.8})`; // Red
+                        imgData.data[idx] = 239;
+                        imgData.data[idx + 1] = 68;
+                        imgData.data[idx + 2] = 68;
+                        imgData.data[idx + 3] = Math.floor((0.15 + opacity * 0.8) * 255);
                     } else {
                         const opacity = Math.min(1.0, -diff / 5.0);
-                        ctx.fillStyle = `rgba(59, 130, 246, ${0.15 + opacity * 0.8})`; // Blue
+                        imgData.data[idx] = 59;
+                        imgData.data[idx + 1] = 130;
+                        imgData.data[idx + 2] = 246;
+                        imgData.data[idx + 3] = Math.floor((0.15 + opacity * 0.8) * 255);
                     }
-                    ctx.fillRect(c * cellW, r * cellH, cellW + 0.3, cellH + 0.3);
                 }
             }
+            oCtx.putImageData(imgData, 0, 0);
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(offscreen, 0, 0, w, h);
         }
 
         // Textual Forecast Summary Generator
