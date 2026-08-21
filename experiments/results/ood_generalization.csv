@@ -1,0 +1,5 @@
+eval_set,model,mse,rel_l2,pinn
+ID Test Set,PI-FNO (PINN),8.500 ± 10.946,0.508 ± 0.187,36.06 ± 35.40
+ID Test Set,Data-Driven FNO,8.639 ± 10.834,0.517 ± 0.192,50.90 ± 45.19
+OOD Test Set,PI-FNO (PINN),32.369 ± 26.139,1.044 ± 0.299,292.52 ± 226.47
+OOD Test Set,Data-Driven FNO,31.829 ± 26.003,1.026 ± 0.224,352.50 ± 258.51

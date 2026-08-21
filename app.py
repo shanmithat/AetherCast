@@ -6,7 +6,7 @@ from flask import Flask, jsonify, render_template, request
 
 # Import unified configuration, physics, and model structures from aethercast
 from aethercast.config import (
-    GRID_RES, BOX_KM, CACHE_TTL_SECONDS, MINUTES_PER_STEP, WU_BASE_URL, WEATHER_UNION_API_KEY
+    GRID_RES, BOX_KM, CACHE_TTL_SECONDS, MINUTES_PER_STEP
 )
 from aethercast.physics import (
     sample_stations, idw_interpolate, mean_wind_vector, km_to_deg_lat, km_to_deg_lon
@@ -96,7 +96,7 @@ def predict_target():
     except (TypeError, ValueError):
         return jsonify({"status": "error", "message": "Invalid coordinates"}), 400
 
-    # Fetch and sample localized Weather Union observations
+    # Fetch and sample localized Tomorrow.io observations
     stations, coverage_found, met, cache_ttl, was_cached = sample_stations(lat, lon, demo_mode)
 
     # Compute interpolated rainfall intensity grid in km coordinates

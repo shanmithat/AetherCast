@@ -1,0 +1,7 @@
+configuration,mse_pde
+Ground Truth Reference,38.90797805786133
+PI-FNO Base Predictions,48.16734313964844
+Spatial Jitter (Displacement),1255.8897705078125
+Amplitude Scaling (Nonphysical Decay),954.4981689453125
+Excessive Blurring (Diffusion Mismatch),29.74159049987793
+Temporal Shuffling (Broken Time),3179.492431640625

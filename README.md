@@ -4,6 +4,7 @@ emoji: 🌧
 colorFrom: blue
 colorTo: indigo
 sdk: docker
+app_file: app.py
 pinned: false
 ---
 
@@ -28,7 +29,7 @@ The repository contains:
 * an explicit discrete transport reference,
 * controlled training-size and physics-weight ablations,
 * quantitative and qualitative evaluation artifacts,
-* and a live visualization pipeline using localized Weather Union observations.
+* and a live visualization pipeline using localized Tomorrow.io observations.
 
 A pretrained model checkpoint is included for deployment.
 
@@ -46,7 +47,7 @@ The PI-FNO predicts the complete 24-step trajectory in a **single forward pass**
 
 ### A weather-data-driven visualization pipeline
 
-The live demonstration obtains a localized Weather Union observation, constructs a spatially varying initial field using explicitly disclosed virtual support points and inverse-distance weighting (IDW), and passes the resulting field through the pretrained neural operator.
+The live demonstration obtains a localized Tomorrow.io observation, constructs a spatially varying initial field using explicitly disclosed virtual support points and inverse-distance weighting (IDW), and passes the resulting field through the pretrained neural operator.
 
 ---
 
@@ -71,7 +72,7 @@ These limitations are intentional and are part of the research prototype design.
 The complete pipeline consists of five stages:
 
 1. **Localized weather observation**
-   A Weather Union observation is obtained for the requested geographic coordinate.
+   A Tomorrow.io observation is obtained for the requested geographic coordinate.
 
 2. **Synthetic spatial support**
    Four virtual neighboring support points are generated from the localized observation using fixed perturbation factors. These points are explicitly synthetic and are used only to create a spatially varying initial field.
@@ -235,18 +236,18 @@ $$\lambda_{phy} = 0.01$$
 
 | Training Size |    Evaluation MSE ↓ | Relative $L_2$ Error ↓ |             MSE-PDE ↓ |
 | ------------: | ------------------: | ---------------------: | --------------------: |
-|            64 | 7.287850 ± 5.123512 |    0.621721 ± 0.151242 | 57.841912 ± 41.248910 |
-|           128 | 5.618910 ± 4.241590 |    0.543719 ± 0.129841 | 48.291344 ± 38.109251 |
-|           256 | 3.869511 ± 3.012489 |    0.449641 ± 0.110252 | 47.639341 ± 35.241092 |
-|           512 | 2.637725 ± 2.109841 |    0.381342 ± 0.098421 | 47.420520 ± 33.098412 |
-|          1024 | 1.504410 ± 1.241920 |    0.297529 ± 0.080194 | 43.954590 ± 29.987410 |
+|            64 | 13.5319 ± 11.9225   |    0.6749 ± 0.1396     | 62.7560 ± 57.5297     |
+|           128 |  9.6324 ±  9.2562   |    0.5629 ± 0.1501     | 54.8828 ± 50.8359     |
+|           256 |  6.7811 ±  7.5229   |    0.4698 ± 0.1780     | 47.2955 ± 44.4797     |
+|           512 |  4.7250 ±  6.4284   |    0.3789 ± 0.1860     | 39.1649 ± 36.2325     |
+|          1024 |  2.7150 ±  4.6461   |    0.2764 ± 0.1556     | 31.1647 ± 28.0347     |
 
 Increasing the training set size produces a monotonic reduction in both prediction MSE and Relative $L_2$ error.
 
 From 64 to 1024 training trajectories:
 
-* MSE decreases by approximately **79.4%**.
-* Relative $L_2$ error decreases by approximately **52.1%**.
+* MSE decreases by approximately **80.0%**.
+* Relative $L_2$ error decreases by approximately **59.0%**.
 
 ---
 
@@ -260,17 +261,10 @@ with the training set fixed at 256 trajectories.
 
 | $\lambda_{phy}$ |    Evaluation MSE ↓ | Relative $L_2$ Error ↓ |             MSE-PDE ↓ |
 | --------------: | ------------------: | ---------------------: | --------------------: |
-|             0.0 | 3.679375 ± 2.941098 |    0.447178 ± 0.110192 | 74.316418 ± 52.098410 |
-|           0.001 | 3.872679 ± 3.010242 |    0.452987 ± 0.111928 | 70.058023 ± 49.209142 |
-|            0.01 | 3.777306 ± 2.981094 |    0.446050 ± 0.109841 | 47.474849 ± 35.109841 |
-|            0.05 | 3.952990 ± 3.109842 |    0.475213 ± 0.118942 | 24.748852 ± 19.209841 |
-|             0.1 | 4.359474 ± 3.489109 |    0.497618 ± 0.124109 | 17.073333 ± 12.984102 |
+|             0.0 | 7.077 ± 7.876       |    0.478 ± 0.174       | 74.57 ± 65.93         |
+|            0.01 | 6.781 ± 7.523       |    0.470 ± 0.178       | 47.30 ± 44.48         |
 
-Increasing the physics weight substantially reduces the measured PDE residual.
-
-At $\lambda_{phy} = 0.1$, the mean PDE residual decreases by approximately **77%** relative to the unregularized FNO.
-
-The $\lambda_{phy} = 0.01$ configuration provides a useful compromise: relative to the pure data-driven model, it reduces the mean PDE residual by approximately **36.1%** while increasing MSE by approximately **2.7%** and producing the lowest Relative $L_2$ error among the tested settings.
+*(Evaluated across 5 independent seeds on the 1,000-sample test set).*
 
 ---
 
@@ -285,26 +279,26 @@ It is compared against:
 * an unregularized data-driven FNO,
 * the Discrete Transport Reference.
 
-The 100-, 500-, and 1,000-trajectory evaluation sets are deterministic nested subsets generated from the same seed-42 sequence.
+The 100-, 500-, and 1,000-trajectory evaluation sets are independent splits generated using a non-overlapping seed protocol.
 
 | Evaluation Size | Model                        |  Prediction MSE ↓ |    Relative $L_2$ ↓ |         MSE-PDE ↓ |      Latency |
 | --------------: | ---------------------------- | ----------------: | ------------------: | ----------------: | -----------: |
-|             100 | **PI-FNO**                   | **4.858 ± 4.179** |   **0.398 ± 0.146** | **45.67 ± 35.73** |    28.684 ms |
-|                 | Data-Driven FNO              |     5.270 ± 4.361 |       0.415 ± 0.142 |     80.35 ± 62.22 |    24.086 ms |
-|                 | Discrete Transport Reference |         reference |           reference |     51.13 ± 64.05 | **2.405 ms** |
-|             500 | **PI-FNO**                   | **6.086 ± 6.506** |   **0.439 ± 0.167** | **46.70 ± 39.18** |    22.387 ms |
-|                 | Data-Driven FNO              |     6.545 ± 6.765 |       0.455 ± 0.162 |     77.61 ± 61.06 |    23.458 ms |
-|                 | Discrete Transport Reference |         reference |           reference |     40.34 ± 43.22 | **2.662 ms** |
-|            1000 | **PI-FNO**                   | **6.787 ± 8.630** |   **0.446 ± 0.166** | **49.44 ± 44.93** |    24.637 ms |
-|                 | Data-Driven FNO              |     7.335 ± 9.269 |       0.464 ± 0.160 |     81.74 ± 70.26 |    23.855 ms |
-|                 | Discrete Transport Reference |         reference |           reference |     42.28 ± 46.11 | **2.483 ms** |
+|             100 | **PI-FNO**                   | **7.484 ± 9.090** |   **0.466 ± 0.178** | **52.51 ± 51.78** |    23.044 ms |
+|                 | Data-Driven FNO              |     7.779 ± 9.616 |       0.473 ± 0.171 |     81.41 ± 73.37 |    22.384 ms |
+|                 | Discrete Transport Reference |         reference |           reference |     44.71 ± 47.38 | **2.358 ms** |
+|             500 | **PI-FNO**                   | **7.050 ± 8.090** |   **0.472 ± 0.177** | **48.86 ± 48.06** |    22.697 ms |
+|                 | Data-Driven FNO              |     7.346 ± 8.425 |       0.480 ± 0.172 |     76.61 ± 70.06 |    23.112 ms |
+|                 | Discrete Transport Reference |         reference |           reference |     40.97 ± 43.39 | **2.345 ms** |
+|            1000 | **PI-FNO**                   | **6.781 ± 7.523** |   **0.470 ± 0.178** | **47.30 ± 44.48** |    24.279 ms |
+|                 | Data-Driven FNO              |     7.077 ± 7.876 |       0.478 ± 0.174 |     74.57 ± 65.93 |    23.297 ms |
+|                 | Discrete Transport Reference |         reference |           reference |     39.46 ± 41.07 | **2.327 ms** |
 
 Across all three evaluation sizes, PI-FNO obtains lower **mean prediction MSE, Relative $L_2$ error, and PDE residual** than the data-driven FNO.
 
 On the 1,000-trajectory evaluation:
 
-* prediction MSE decreases by approximately **7.5%**,
-* PDE residual decreases by approximately **39.5%**.
+* prediction MSE decreases by approximately **4.2%**,
+* PDE residual decreases by approximately **36.6%**.
 
 The experiment supports the interpretation that the physics residual acts as a regularizer that improves physical consistency while preserving competitive prediction accuracy.
 
@@ -367,8 +361,8 @@ Latency is measured per trajectory.
 
 Under the current $32 \times 32$ CPU benchmark, the discrete transport reference is faster than neural inference:
 
-* Discrete reference: approximately **2.4–2.8 ms**
-* FNO inference: approximately **22–29 ms**
+* Discrete reference: approximately **2.3 ms**
+* FNO inference: approximately **23–24 ms**
 
 Therefore, AetherCast **does not claim a computational speed advantage at this small grid size**.
 
@@ -378,9 +372,9 @@ Potential scaling advantages of neural operators for larger spatial domains, lon
 
 # Live Weather Demonstration
 
-## Weather Union
+## Tomorrow.io API
 
-The live pipeline queries a localized Weather Union observation for:
+The live pipeline queries a localized Tomorrow.io observation for:
 
 * temperature,
 * humidity,

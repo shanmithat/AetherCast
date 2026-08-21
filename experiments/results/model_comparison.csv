@@ -1,10 +1,10 @@
 test_size,model,mse,rel_l2,pinn,latency
-100,PI-FNO,4.858 ± 4.179,0.398 ± 0.146,45.67 ± 35.73,28.684 ms
-100,Data-Driven FNO,5.270 ± 4.361,0.415 ± 0.142,80.35 ± 62.22,24.086 ms
-100,Discrete Transport Reference,reference,reference,51.13 ± 64.05,2.405 ms
-500,PI-FNO,6.086 ± 6.506,0.439 ± 0.167,46.70 ± 39.18,22.387 ms
-500,Data-Driven FNO,6.545 ± 6.765,0.455 ± 0.162,77.61 ± 61.06,23.458 ms
-500,Discrete Transport Reference,reference,reference,40.34 ± 43.22,2.662 ms
-1000,PI-FNO,6.787 ± 8.630,0.446 ± 0.166,49.44 ± 44.93,24.637 ms
-1000,Data-Driven FNO,7.335 ± 9.269,0.464 ± 0.160,81.74 ± 70.26,23.855 ms
-1000,Discrete Transport Reference,reference,reference,42.28 ± 46.11,2.483 ms
+100,PI-FNO,7.484 ± 9.090,0.466 ± 0.178,52.51 ± 51.78,23.044 ms
+100,Data-Driven FNO,7.779 ± 9.616,0.473 ± 0.171,81.41 ± 73.37,22.384 ms
+100,Discrete Transport Reference,reference,reference,44.71 ± 47.38,2.358 ms
+500,PI-FNO,7.050 ± 8.090,0.472 ± 0.177,48.86 ± 48.06,22.697 ms
+500,Data-Driven FNO,7.346 ± 8.425,0.480 ± 0.172,76.61 ± 70.06,23.112 ms
+500,Discrete Transport Reference,reference,reference,40.97 ± 43.39,2.345 ms
+1000,PI-FNO,6.781 ± 7.523,0.470 ± 0.178,47.30 ± 44.48,24.279 ms
+1000,Data-Driven FNO,7.077 ± 7.876,0.478 ± 0.174,74.57 ± 65.93,23.297 ms
+1000,Discrete Transport Reference,reference,reference,39.46 ± 41.07,2.327 ms

@@ -27,7 +27,7 @@ def set_seeds(seed):
 def train_model(lambda_phy=0.01, epochs=30, num_samples=256, device="cpu"):
     set_seeds(SEED)
     model = FNO2d().to(device)
-    X, Y = generate_synthetic_data(num_samples)
+    X, Y = generate_synthetic_data(num_samples, seed=SEED)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-4)
@@ -67,9 +67,10 @@ def main():
     print("Training Data-Driven FNO model...")
     model_data = train_model(lambda_phy=0.0, device=device)
     
-    # Generate test set of 1,000 samples
-    set_seeds(SEED)
-    X_val, Y_val = generate_synthetic_data(1000)
+    # Generate independent test set of 1,000 samples
+    test_seed = SEED + 20000
+    print(f"Generating test set with seed {test_seed}...")
+    X_val, Y_val = generate_synthetic_data(1000, seed=test_seed)
     
     pinn_criterion = PhysicsInformedLoss().to(device)
     

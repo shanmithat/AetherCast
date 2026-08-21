@@ -25,7 +25,7 @@ def set_seeds(seed):
 def train_model(lambda_phy=0.01, epochs=30, num_samples=256, device="cpu"):
     set_seeds(SEED)
     model = FNO2d().to(device)
-    X, Y = generate_synthetic_data(num_samples)
+    X, Y = generate_synthetic_data(num_samples, seed=SEED)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-4)
@@ -65,9 +65,10 @@ def main():
     model = train_model(lambda_phy=0.01, device=device)
     model.eval()
     
-    # Generate test set
-    set_seeds(SEED)
-    X_val, Y_val = generate_synthetic_data(50)  # Generate 50 trajectories, pick 3
+    # Generate independent test set (non-overlapping seeds)
+    test_seed = SEED + 20000
+    print(f"Generating test set with seed {test_seed}...")
+    X_val, Y_val = generate_synthetic_data(50, seed=test_seed)  # Generate 50 trajectories, pick 3
     
     # We choose test cases 0, 4, and 7 as representative advection cases
     indices_to_plot = [0, 4, 7]

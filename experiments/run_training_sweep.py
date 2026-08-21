@@ -15,7 +15,7 @@ from aethercast.models.fno2d import FNO2d
 from aethercast.utils.physics_loss import PhysicsInformedLoss
 from aethercast.data import generate_synthetic_data
 
-SEED = 42
+SEEDS = [42, 100, 2026, 7, 999]
 
 def set_seeds(seed):
     random.seed(seed)
@@ -24,10 +24,10 @@ def set_seeds(seed):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-def train_model(lambda_phy=0.01, epochs=30, num_samples=256, device="cpu"):
-    set_seeds(SEED)  # Ensure data generation inside train uses deterministic starts
+def train_model(lambda_phy=0.01, epochs=30, num_samples=256, seed=42, device="cpu"):
+    set_seeds(seed)
     model = FNO2d().to(device)
-    X, Y = generate_synthetic_data(num_samples)
+    X, Y = generate_synthetic_data(num_samples, seed=seed)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-4)
@@ -57,7 +57,7 @@ def train_model(lambda_phy=0.01, epochs=30, num_samples=256, device="cpu"):
         
     return model
 
-def evaluate_model(model, X_val, Y_val, device):
+def evaluate_model_samples(model, X_val, Y_val, device):
     model.eval()
     mse_list = []
     rel_l2_list = []
@@ -66,55 +66,55 @@ def evaluate_model(model, X_val, Y_val, device):
     pinn_criterion = PhysicsInformedLoss().to(device)
     
     with torch.inference_mode():
-        for i in range(0, len(X_val), 32):
-            bx = X_val[i:i+32].to(device)
-            by = Y_val[i:i+32].to(device)
+        for i in range(len(X_val)):
+            bx = X_val[i:i+1].to(device)
+            by = Y_val[i:i+1].to(device)
             out = model(bx)
             
-            for j in range(len(bx)):
-                single_out = out[j:j+1]
-                single_by = by[j:j+1]
-                single_bx = bx[j:j+1]
-                
-                mse = F.mse_loss(single_out, single_by).item()
-                rel_l2 = (torch.norm(single_out - single_by) / torch.norm(single_by)).item()
-                pinn = pinn_criterion(single_out, single_bx).item()
-                
-                mse_list.append(mse)
-                rel_l2_list.append(rel_l2)
-                pinn_list.append(pinn)
+            mse = F.mse_loss(out, by).item()
+            rel_l2 = (torch.norm(out - by) / torch.norm(by)).item()
+            pinn = pinn_criterion(out, bx).item()
             
-    # Compute mean and standard deviation
-    return {
-        "mse_mean": np.mean(mse_list), "mse_std": np.std(mse_list),
-        "rel_l2_mean": np.mean(rel_l2_list), "rel_l2_std": np.std(rel_l2_list),
-        "pinn_mean": np.mean(pinn_list), "pinn_std": np.std(pinn_list)
-    }
+            mse_list.append(mse)
+            rel_l2_list.append(rel_l2)
+            pinn_list.append(pinn)
+            
+    return mse_list, rel_l2_list, pinn_list
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Running Training Size Sweep on {device}...")
-    
-    # Generate fixed 1,000-sample test set using SEED
-    set_seeds(SEED)
-    X_val, Y_val = generate_synthetic_data(1000)
+    print(f"Running Training Size Sweep on {device} across 5 seeds...")
     
     sizes = [64, 128, 256, 512, 1024]
     results = []
     
     for size in sizes:
-        print(f"Training FNO with training set size = {size}...")
-        model = train_model(lambda_phy=0.01, num_samples=size, device=device)
-        metrics = evaluate_model(model, X_val, Y_val, device)
+        print(f"\nEvaluating training size = {size}...")
         
+        all_mses, all_l2s, all_pdes = [], [], []
+        
+        for seed in SEEDS:
+            # 1. Train model
+            model = train_model(lambda_phy=0.01, epochs=30, num_samples=size, seed=seed, device=device)
+            
+            # 2. Generate independent test set
+            test_seed = seed + 20000
+            X_val, Y_val = generate_synthetic_data(1000, seed=test_seed)
+            
+            # 3. Evaluate
+            mses, l2s, pdes = evaluate_model_samples(model, X_val, Y_val, device)
+            all_mses.extend(mses)
+            all_l2s.extend(l2s)
+            all_pdes.extend(pdes)
+            
         results.append({
             "size": size,
-            "mse_mean": metrics["mse_mean"], "mse_std": metrics["mse_std"],
-            "rel_l2_mean": metrics["rel_l2_mean"], "rel_l2_std": metrics["rel_l2_std"],
-            "pinn_mean": metrics["pinn_mean"], "pinn_std": metrics["pinn_std"]
+            "mse_mean": np.mean(all_mses), "mse_std": np.std(all_mses),
+            "rel_l2_mean": np.mean(all_l2s), "rel_l2_std": np.std(all_l2s),
+            "pinn_mean": np.mean(all_pdes), "pinn_std": np.std(all_pdes)
         })
         
-        print(f"Size {size} complete: MSE = {metrics['mse_mean']:.6f} ± {metrics['mse_std']:.6f}")
+        print(f"Size {size} complete: MSE = {np.mean(all_mses):.6f} ± {np.std(all_mses):.6f}")
 
     # Ensure results directory exists
     os.makedirs("experiments/results", exist_ok=True)

@@ -6,7 +6,7 @@
     <title>AetherCast // FNO-2D Weather Nowcasting Engine</title>
     
     <!-- SEO Metadata -->
-    <meta name="description" content="Fourier Neural Operator (FNO) weather nowcasting portal powered by the Weather Union API. Physics-informed FNO model for 2D transport simulation and weather-data-driven local precipitation nowcasting.">
+    <meta name="description" content="Fourier Neural Operator (FNO) weather nowcasting portal powered by the Tomorrow.io API. Physics-informed FNO model for 2D transport simulation and weather-data-driven local precipitation nowcasting.">
     
     <!-- Typography & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -154,7 +154,7 @@
                 </div>
                 <div>
                     <h1 class="text-2xl font-black font-outfit bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 tracking-tight">AETHERCAST</h1>
-                    <p class="text-xs font-mono text-indigo-400">Fourier Neural Operator Nowcasting Engine &bull; Weather Union API</p>
+                    <p class="text-xs font-mono text-indigo-400">Fourier Neural Operator Nowcasting Engine &bull; Tomorrow.io API</p>
                 </div>
             </div>
             
@@ -223,7 +223,7 @@
 
                 <!-- Presets Grid -->
                 <div class="space-y-3 max-w-lg mx-auto border-t theme-inner-border pt-6">
-                    <span class="text-[10px] font-mono theme-text-tertiary uppercase tracking-widest block">Weather Union Stations Presets</span>
+                    <span class="text-[10px] font-mono theme-text-tertiary uppercase tracking-widest block">Tomorrow.io Coordinate Presets</span>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <button onclick="loadPreset(12.9716, 77.5946, 'Bangalore')" class="theme-inner-bg border theme-inner-border p-2.5 rounded-xl text-xs font-mono theme-text-secondary hover:text-blue-500 transition flex flex-col items-center gap-1.5">
                             <span class="font-semibold">Bangalore</span>
@@ -300,7 +300,7 @@
                         <div id="coverage-banner" class="hidden bg-amber-950/20 border border-amber-800/40 text-amber-600 dark:text-amber-300 p-4 rounded-xl text-xs font-mono leading-relaxed">
                             <div class="flex gap-2 items-start">
                                 <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
-                                <span>Locality is outside the Weather Union API geographical coverage. Showing standard weather projections.</span>
+                                <span>Locality is outside the Tomorrow.io API geographical coverage. Showing standard weather projections.</span>
                             </div>
                         </div>
 
@@ -1274,7 +1274,7 @@
                 }
 
             } catch (err) {
-                console.error("Connection to Weather Union nowcasting loop failed:", err);
+                console.error("Connection to Tomorrow.io nowcasting loop failed:", err);
             }
         }
 

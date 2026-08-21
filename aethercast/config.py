@@ -5,7 +5,7 @@ GRID_RES = 32                 # Output grid resolution (32x32)
 BOX_KM = 15                   # Half-width (km) of the sampling/nowcast box (30 km domain)
 MINUTES_PER_STEP = 5          # 5 minutes per forecast step
 PREDICTION_STEPS = 24         # 24 steps = 120 minutes (2 hour nowcast horizon)
-CACHE_TTL_SECONDS = 300       # 5 minutes caching for Weather Union API responses
+CACHE_TTL_SECONDS = 300       # 5 minutes caching for Tomorrow.io API responses
 
 # Transport Dynamics Constants
 DECAY_PER_STEP = 0.025        # Multiplicative decay factor per 5-minute step
@@ -26,5 +26,4 @@ DIFFUSION_COEFF = DIFFUSION_PER_STEP * (DX ** 2) / DT
 DECAY_RATE = DECAY_PER_STEP * 12.0  # lambda_d: continuous decay per hour = 0.025 * 12 = 0.3 h^-1
 
 # API Ingestion
-WU_BASE_URL = "https://www.weatherunion.com/gw/weather/external/v0/get_weather_data"
-WEATHER_UNION_API_KEY = os.environ.get("WEATHER_UNION_API_KEY")
+TOMORROW_API_KEY = os.environ.get("TOMORROW_API_KEY", "pqgJNdlLcSeprS1oiPd8Q3UThE6cnuFS")

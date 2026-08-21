@@ -24,11 +24,19 @@ def shift2d(field, d_row, d_col):
     out = np.roll(out, d_col, axis=1)
     return out
 
-def generate_synthetic_data(num_samples=256):
+def generate_synthetic_data(num_samples=256, seed=None, wind_range=None):
     """
     Generates synthetic advection-diffusion weather trajectories using recursive step-wise
     advection, constant diffusion steps, and true exponential physical decay.
     """
+    if seed is not None:
+        # Save previous random states
+        py_state = random.getstate()
+        np_state = np.random.get_state()
+        # Set temporary seeds
+        random.seed(seed)
+        np.random.seed(seed)
+
     X = []
     Y = []
     x_grid, y_grid = np.meshgrid(np.arange(GRID_RES), np.arange(GRID_RES), indexing='ij')
@@ -48,8 +56,22 @@ def generate_synthetic_data(num_samples=256):
             rain += intensity * np.exp(-dist2 / (2 * r**2))
 
         # Random wind vector [U, V] in km/h
-        u = random.uniform(WIND_MIN, WIND_MAX)
-        v = random.uniform(WIND_MIN, WIND_MAX)
+        if wind_range is not None:
+            if isinstance(wind_range, tuple):
+                u = random.uniform(wind_range[0], wind_range[1])
+                v = random.uniform(wind_range[0], wind_range[1])
+            elif isinstance(wind_range, list):
+                # Disjoint intervals
+                interval_u = random.choice(wind_range)
+                interval_v = random.choice(wind_range)
+                u = random.uniform(interval_u[0], interval_u[1])
+                v = random.uniform(interval_v[0], interval_v[1])
+            else:
+                u = random.uniform(WIND_MIN, WIND_MAX)
+                v = random.uniform(WIND_MIN, WIND_MAX)
+        else:
+            u = random.uniform(WIND_MIN, WIND_MAX)
+            v = random.uniform(WIND_MIN, WIND_MAX)
 
         u_field = np.full((GRID_RES, GRID_RES), u, dtype=np.float32)
         v_field = np.full((GRID_RES, GRID_RES), v, dtype=np.float32)
@@ -77,5 +99,10 @@ def generate_synthetic_data(num_samples=256):
 
         X.append(x_sample)
         Y.append(y_sample)
+
+    if seed is not None:
+        # Restore previous random states
+        random.setstate(py_state)
+        np.random.set_state(np_state)
 
     return torch.tensor(np.array(X)), torch.tensor(np.array(Y))

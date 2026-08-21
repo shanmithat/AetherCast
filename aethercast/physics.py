@@ -2,7 +2,7 @@ import math
 import numpy as np
 import requests
 import time
-from aethercast.config import GRID_RES, BOX_KM, WU_BASE_URL, WEATHER_UNION_API_KEY, CACHE_TTL_SECONDS, DX, DY
+from aethercast.config import GRID_RES, BOX_KM, TOMORROW_API_KEY, CACHE_TTL_SECONDS, DX, DY
 
 # Cache station pulls: (lat, lon, demo) -> (timestamp, stations_list, coverage_found, met_dict)
 _station_cache = {}
@@ -16,19 +16,25 @@ def km_to_deg_lon(km, at_lat):
     return km / (111.0 * math.cos(math.radians(at_lat)))
 
 def fetch_station(lat, lon):
-    """Hits the Weather Union API for a single location coordinate."""
-    if not WEATHER_UNION_API_KEY:
+    """Hits the Tomorrow.io API for a single location coordinate."""
+    if not TOMORROW_API_KEY:
         return None
-    headers = {"x-zomato-api-key": WEATHER_UNION_API_KEY}
-    params = {"latitude": lat, "longitude": lon}
+    url = "https://api.tomorrow.io/v4/weather/forecast"
+    params = {
+        "location": f"{lat},{lon}",
+        "apikey": TOMORROW_API_KEY
+    }
     try:
-        resp = requests.get(WU_BASE_URL, headers=headers, params=params, timeout=5)
+        resp = requests.get(url, params=params, timeout=8)
         if resp.status_code == 200:
             data = resp.json()
-            if data.get("status") in [200, "200"]:
-                return data.get("locality_weather_data", {})
+            timelines = data.get("timelines", {})
+            for timeline_name in ["minutely", "hourly"]:
+                timeline = timelines.get(timeline_name, [])
+                if len(timeline) > 0 and "values" in timeline[0]:
+                    return timeline[0]["values"]
     except Exception as e:
-        print(f"[WU API Fetch Error] at ({lat}, {lon}): {e}")
+        print(f"[Tomorrow.io API Fetch Error] at ({lat}, {lon}): {e}")
     return None
 
 def sample_stations(center_lat, center_lon, demo_mode=False):
@@ -71,16 +77,25 @@ def sample_stations(center_lat, center_lon, demo_mode=False):
             coverage_found = True
             met["temperature"] = data.get("temperature") if data.get("temperature") is not None else 25.0
             met["humidity"] = data.get("humidity") if data.get("humidity") is not None else 70.0
-            met["wind_speed"] = data.get("wind_speed") if data.get("wind_speed") is not None else 5.0
-            met["wind_direction"] = data.get("wind_direction") if data.get("wind_direction") is not None else 90.0
-            met["rain_intensity"] = data.get("rain_intensity") if data.get("rain_intensity") is not None else 0.0
+            
+            # Tomorrow.io windSpeed is in m/s, convert to km/h by multiplying by 3.6
+            wind_m_s = data.get("windSpeed")
+            met["wind_speed"] = wind_m_s * 3.6 if wind_m_s is not None else 5.0
+            
+            met["wind_direction"] = data.get("windDirection") if data.get("windDirection") is not None else 90.0
+            
+            # Support both rainIntensity and precipitationIntensity
+            rain = data.get("rainIntensity")
+            if rain is None:
+                rain = data.get("precipitationIntensity", 0.0)
+            met["rain_intensity"] = rain if rain is not None else 0.0
         else:
             coverage_found = False
             met["rain_intensity"] = 0.0
             met["wind_speed"] = 0.0
             met["wind_direction"] = 0.0
 
-    # Center localized Weather Union observation
+    # Center localized Tomorrow.io observation
     stations.append({
         "lat": center_lat, "lon": center_lon,
         "rain_intensity": met["rain_intensity"],

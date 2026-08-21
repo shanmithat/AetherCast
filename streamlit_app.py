@@ -81,7 +81,7 @@ norm = mcolors.BoundaryNorm(bounds, cmap.N)
 # STREAMLIT UI
 # =====================================================================
 st.title("⛈️ AETHERCAST // Neural Weather Nowcasting Portal")
-st.write("2D Fourier Neural Operator weather projections powered by Weather Union API.")
+st.write("2D Fourier Neural Operator weather projections powered by Tomorrow.io API.")
 
 # Load FNO Model
 model = load_fno_model()
@@ -124,11 +124,11 @@ else:
     with st.spinner("Fetching Locality Weather Data..."):
         stations, coverage_found, met, cache_ttl, was_cached = sample_stations(st.session_state.lat, st.session_state.lon, demo_mode)
         if coverage_found and not demo_mode:
-            st.sidebar.success("Weather Union API: Station data loaded successfully.")
+            st.sidebar.success("Tomorrow.io API: Station data loaded successfully.")
         elif demo_mode:
             st.sidebar.success("Demo Mode: Synthesizing rainfall cells.")
         else:
-            st.sidebar.warning("Locality outside Weather Union coverage. Showing flat forecast.")
+            st.sidebar.warning("Locality outside Tomorrow.io coverage. Showing flat forecast.")
 
     # Compute Wind Vector U and V
     u, v = mean_wind_vector(stations)
